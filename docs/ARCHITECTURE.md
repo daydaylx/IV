@@ -1,5 +1,11 @@
 # Architektur des IV-MVP
 
+## Dokumentstatus
+
+Dieses Dokument beschreibt das akzeptierte Architekturziel für das MVP. Es ist keine Behauptung, dass alle genannten Module und Typen bereits implementiert sind.
+
+Der tatsächliche Stand steht in [`PROJECT_STATE.md`](PROJECT_STATE.md). Abweichende grundlegende Entscheidungen werden als ADR unter [`decisions/`](decisions/) dokumentiert.
+
 ## Ziel
 
 Die Architektur schützt den Terminalbetrieb vor UI-, Netzwerk- und KI-Komplexität. Sie ist bewusst klein und darf erst erweitert werden, wenn ein konkreter MVP-Anwendungsfall dies verlangt.
@@ -81,6 +87,8 @@ Split {
 - maskierte sensible Werte
 - sichtbare Vorschau vor Versand
 
+Die konkreten Rust-Typen werden erst mit der jeweiligen Implementierung verbindlich. Namen in diesem Dokument sind fachliche Orientierung, keine unveränderliche API-Vorgabe.
+
 ## TerminalBackend
 
 Die Schnittstelle muss nur tatsächlich benötigte Operationen anbieten:
@@ -130,10 +138,13 @@ Im MVP bevorzugt:
 
 ## Architekturänderungen
 
-Eine Änderung an diesen Grenzen benötigt eine kurze Entscheidung unter `docs/decisions/` mit:
+Eine Änderung an diesen Grenzen benötigt eine ADR unter `docs/decisions/` mit:
 
-- Problem
-- gewählte Lösung
-- verworfene Alternativen
-- Auswirkungen
-- Rückbauoption
+- Problem und Kontext
+- gewählter Lösung
+- verworfenen Alternativen
+- Auswirkungen und Risiken
+- Verifikation
+- Rückbau- oder Migrationsoption
+
+Ablauf: [`decisions/README.md`](decisions/README.md).

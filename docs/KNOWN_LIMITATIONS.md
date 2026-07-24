@@ -1,56 +1,69 @@
 # Bekannte Einschränkungen
 
-## Zweck
+## Dokumentstatus
 
-Dieses Dokument hält bewusst akzeptierte Grenzen fest. Einschränkungen werden nicht durch versteckte Zusatzarchitektur umgangen.
+Dieses Dokument enthält bestätigte oder bewusst akzeptierte Einschränkungen. Allgemeine Produkt-Nicht-Ziele stehen in `AGENTS.md`; zukünftige Phasen stehen in `ROADMAP.md`.
+
+Eine Einschränkung darf erst als behoben entfernt werden, wenn Implementierung und passende Tests dies belegen.
+
+## Aktueller Projektstand
+
+IV befindet sich in Planung und technischer Vorbereitung. Der belastbare Rust-/GTK4-/VTE-Anwendungskern ist noch nicht als implementiert vorauszusetzen.
+
+Aktuelle Details: [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
 ## Plattform
 
-- Linux zuerst
-- Wayland ist primäre Zielumgebung
-- X11 nur, soweit GTK/VTE es ohne wesentlichen Zusatzaufwand tragen
-- keine Unterstützung für Windows oder macOS im MVP
+- Linux ist die einzige geplante MVP-Plattform.
+- Wayland ist die primäre Zielumgebung.
+- X11 wird nur unterstützt, soweit GTK4 und VTE dies ohne wesentliche Zusatzarchitektur tragen.
+- Windows und macOS sind nicht Teil des MVP.
 
-## Terminal
+## Terminal-Backend
 
-- VTE ist das einzige Backend im MVP
-- kein eigener Terminalparser
-- kein eigener GPU-Renderer
-- keine vollständige Wiederherstellung laufender Prozesse nach Neustart
-- Terminalbuffer werden nicht dauerhaft gespeichert
+- VTE ist die einzige produktive Terminalimplementierung des MVP.
+- Ein Backendwechsel zur Laufzeit ist nicht vorgesehen.
+- Es gibt im MVP keinen eigenen Terminalparser und keinen eigenen GPU-Renderer.
+- Die konzeptuelle Backend-Schnittstelle muss während Phase 0 gegen die tatsächlichen GTK-/VTE-Bindings geprüft werden.
 
-## Sitzungen
+## Prozesse und Sitzungen
 
-- Layouts können wiederhergestellt werden, Prozesse jedoch nicht nahtlos fortgesetzt werden
-- das aktuelle Arbeitsverzeichnis kann technisch unbekannt sein
-- ein ungültiges Verzeichnis fällt auf einen sicheren Startpfad zurück
+- Gespeicherte Layouts stellen Struktur und Startkonfiguration wieder her, nicht laufende Prozesse.
+- Terminalbuffer werden im MVP nicht dauerhaft gespeichert.
+- Das aktuelle Arbeitsverzeichnis kann technisch unbekannt sein.
+- Ist das aktuelle Verzeichnis unbekannt oder ungültig, muss auf einen bestätigten Startpfad zurückgefallen werden.
+- Vollständige Wiederaufnahme einer laufenden Shell nach einem Anwendungsneustart ist nicht vorgesehen.
 
-## KI
+## KI-Unterstützung
 
-- genau ein OpenAI-kompatibler Provider
-- keine automatische Befehlsausführung
-- keine Tool-Aufrufe oder Agenten-Orchestrierung
-- kein MCP
-- keine permanente Analyse von Terminalausgaben
-- keine garantierte Erkennung aller Secrets
-- KI-Antworten können sachlich falsch oder riskant sein und müssen vom Nutzer geprüft werden
+- Das MVP unterstützt genau einen OpenAI-kompatiblen Provider.
+- KI funktioniert nur nach bewusster Nutzeraktion und ist keine Voraussetzung für Terminalbetrieb.
+- Secret-Erkennung kann bekannte Muster reduzieren, aber keine vollständige Erkennung garantieren.
+- Modellantworten können sachlich falsch, unvollständig oder riskant sein.
+- Risikowarnungen für Befehle sind eine zusätzliche Hilfe und keine Sicherheitsgarantie.
+- Gesprächsverlauf über Sitzungen hinweg wird im MVP nicht gespeichert.
+
+Die verbindlichen Grenzen stehen in [`AI_INTEGRATION.md`](AI_INTEGRATION.md) und [`SECURITY.md`](SECURITY.md).
+
+## Zustands- und Verzeichniserkennung
+
+- Prozessstatus kann nur technisch erkennbare Zustände anzeigen.
+- IV kann nicht zuverlässig behaupten, ob ein fremdes Terminalprogramm „denkt“, „plant“ oder „hängt“.
+- Der Zeitpunkt der letzten Ausgabe ist nur ein technischer Hinweis und kein Beweis für Stillstand.
+- Arbeitsverzeichniserkennung ist bestmöglich; unbekannt bleibt ein gültiger Zustand.
 
 ## Oberfläche
 
-- keine IDE-Funktionen
-- kein Datei-Explorer
-- kein integrierter Editor
-- kein Debugger oder LSP
-- kein visuelles Git-Frontend
-- keine komplexe Projektverwaltung
+- Die Terminalfläche bleibt dominant; permanente IDE-Seitenleisten oder Chatblöcke sind nicht vorgesehen.
+- Kernfunktionen müssen ohne Maus erreichbar sein.
+- Sehr komplexe Sitzungs-, Projekt- oder Fensterverwaltung ist kein Ziel des MVP.
 
-## Synchronisierung und Konten
+## Pflege
 
-- keine Benutzerkonten
-- keine Cloud-Synchronisierung
-- keine Teamfunktionen
-- keine Telemetrie
+Neue Einträge benötigen:
 
-## Dokumentationsregel
+- ein bestätigtes technisches oder produktbezogenes Limit,
+- Auswirkungen auf Nutzer oder Implementierung,
+- gegebenenfalls einen Verweis auf Test, Issue oder ADR.
 
-Neue bekannte Grenzen werden ergänzt, sobald sie bestätigt sind. Eine Einschränkung wird erst entfernt, wenn Implementierung und Tests die Änderung belegen.
+Geplante, aber noch nicht implementierte Funktionen sind nicht automatisch „bekannte Einschränkungen“. Sie gehören in `ROADMAP.md` oder `PROJECT_STATE.md`.

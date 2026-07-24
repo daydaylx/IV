@@ -1,13 +1,14 @@
 # Claude-Projektanweisung
 
-Die verbindlichen Projektregeln stehen in [`AGENTS.md`](AGENTS.md).
+Die einzige verbindliche Quelle für Agentenregeln ist [`AGENTS.md`](AGENTS.md).
 
-Vor jeder Aufgabe zusätzlich lesen:
+Vor jeder Aufgabe:
 
-1. [`README.md`](README.md)
-2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-3. [`docs/DEFINITION_OF_DONE.md`](docs/DEFINITION_OF_DONE.md)
+1. [`AGENTS.md`](AGENTS.md) lesen.
+2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) lesen.
+3. Über [`docs/INDEX.md`](docs/INDEX.md) nur die für die Aufgabe relevanten Fachdokumente laden.
+4. Vor Abschluss die einschlägigen Punkte aus [`docs/DEFINITION_OF_DONE.md`](docs/DEFINITION_OF_DONE.md) prüfen.
 
-Keine abweichenden Regeln in dieser Datei ergänzen. Bei Konflikten gilt `AGENTS.md`.
+Keine abweichenden Projektregeln in dieser Datei ergänzen. Bei Widersprüchen gilt die Zuständigkeits- und Autoritätsregel aus `docs/INDEX.md`.
 
-Vor Implementierungen zuerst Umfang, Nicht-Ziele, betroffene Module und Verifikation nennen. Änderungen klein halten und IV nicht in Richtung IDE erweitern.
+Vor Implementierungen Umfang, Nicht-Ziele, Annahmen, betroffene Module und Verifikation nennen. Änderungen klein halten und IV nicht in Richtung IDE, autonomer Agent oder unnötiger Zukunftsarchitektur erweitern.
