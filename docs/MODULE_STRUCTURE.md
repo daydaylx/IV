@@ -4,24 +4,40 @@
 
 Die Modulstruktur hält UI, Zustand, Terminaltechnik, Persistenz und KI klar getrennt. Abhängigkeiten verlaufen nach innen zur Domänenlogik, nicht kreuz und quer zwischen Widgets und Infrastruktur.
 
-## Vorgeschlagene Struktur
+## Aktuelle Struktur
 
 ```text
 src/
-├── app/
-├── domain/
+├── main.rs
+├── pane/
+│   └── mod.rs
+├── tab/
+│   └── mod.rs
 ├── terminal/
+│   ├── mod.rs
+│   └── vte_backend.rs
+├── settings/
+│   └── mod.rs
+├── workspace/
+│   ├── mod.rs
+│   ├── error.rs
+│   ├── layout.rs
+│   ├── profile.rs
+│   ├── start_config.rs
+│   └── storage.rs
 ├── ui/
-├── config/
-├── profiles/
-├── ai/
-├── infrastructure/
-└── main.rs
+│   ├── mod.rs
+│   ├── actions.rs
+│   ├── links.rs
+│   ├── search.rs
+│   └── window.rs
 ```
 
-Die tatsächlichen Namen dürfen sich während Phase 0 leicht ändern. Die Verantwortungsgrenzen bleiben verbindlich.
+`pane` und `tab` bilden den GTK-/VTE-freien Domänenzustand. `terminal` kapselt VTE und den Prozesslebenszyklus. `settings` lädt und validiert das aktuelle TOML-Schema. `workspace` enthält die bereits testbare, aber noch nicht an UI und Startsequenz angebundene Phase-2-Grundlage für Profile und Layoutdaten. `ui` trennt Aktionen, Linkbehandlung, Suche und Fenster-/Session-Lifecycle.
 
-## `app`
+Die weiter unten beschriebenen separaten Module `domain`, `config`, `profiles`, `ai` und `infrastructure` sind eine Wachstumsrichtung, keine bereits implementierte Verzeichnisstruktur. `app` existiert bereits als dünne Startkoordination; `workspace` bündelt Profile, Layoutmodell und Storage vorerst bewusst. Neue Verzeichnisse entstehen erst mit einem konkreten zweiten Verantwortungsbereich.
+
+## Künftige `app`-Schicht
 
 Koordiniert Anwendungsfälle und Zustandsänderungen:
 
@@ -32,7 +48,7 @@ Koordiniert Anwendungsfälle und Zustandsänderungen:
 
 Keine direkten VTE- oder HTTP-Typen.
 
-## `domain`
+## Aktuelle Domänenmodule und künftiges `domain`
 
 Enthält reine, weitgehend frameworkfreie Logik:
 
@@ -49,7 +65,7 @@ Keine GTK-, VTE-, Tokio- oder HTTP-Abhängigkeit, sofern vermeidbar.
 
 Enthält:
 
-- `TerminalBackend`-Vertrag
+- interne `Terminal`-Fassade
 - Terminal-Handles und Ereignisse
 - `VteBackend`
 - Prozess- und PTY-nahe Umsetzung
@@ -69,7 +85,7 @@ Enthält GTK4/libadwaita-Komponenten:
 
 Widgets lesen Zustand und lösen Aktionen aus. Sie enthalten keine eigenständige versteckte Geschäftslogik.
 
-## `config`
+## Aktuelles `settings` und künftiges `config`
 
 - TOML-Schema
 - Validierung

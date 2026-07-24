@@ -10,6 +10,8 @@ use std::rc::Rc;
 
 use vte_backend::VteBackend;
 
+use crate::workspace::StartConfig;
+
 #[derive(Clone)]
 pub(crate) struct Terminal {
     backend: VteBackend,
@@ -33,9 +35,18 @@ impl Terminal {
     pub(crate) fn start(&self) -> Result<Vec<StartupWarning>, TerminalError> {
         let launch = LaunchConfig::from_environment()?;
         let warnings = launch.warnings.clone();
-        self.backend
-            .spawn(&launch.arguments, &launch.working_directory);
+        self.start_with(&launch)?;
         Ok(warnings)
+    }
+
+    /// Starts the terminal with the given [`LaunchConfig`].
+    ///
+    /// This is the entry point used by profiles and by the layout
+    /// restoration. Errors are propagated as [`TerminalError::Spawn`].
+    pub(crate) fn start_with(&self, config: &LaunchConfig) -> Result<(), TerminalError> {
+        self.backend
+            .spawn(&config.program, &config.args, &config.working_directory);
+        Ok(())
     }
 
     pub(crate) fn copy(&self) -> Result<(), TerminalError> {
@@ -57,7 +68,7 @@ impl Terminal {
         self.backend.connect_title_changed(handler);
     }
 
-    pub(crate) fn request_close<F>(&self, on_ready: F) -> bool
+    pub(crate) fn request_close<F>(&self, on_ready: F) -> CloseRequest
     where
         F: FnOnce() + 'static,
     {
@@ -111,6 +122,12 @@ pub(crate) enum TerminalEvent {
     Started,
     SpawnFailed(TerminalError),
     Exited(ProcessExit),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloseRequest {
+    Ready,
+    Pending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,14 +220,24 @@ impl StartupWarning {
     }
 }
 
-struct LaunchConfig {
-    arguments: Vec<String>,
-    working_directory: String,
-    warnings: Vec<StartupWarning>,
+/// Parametrisierbare Startkonfiguration für ein Pane.
+///
+/// `program` ist der ausführbare Pfad; `args` sind zusätzliche
+/// Argumente (werden hinter `program` angehängt). `working_directory`
+/// ist das Arbeitsverzeichnis zum Startzeitpunkt.
+///
+/// Bestehende Aufrufer von [`LaunchConfig::from_environment`] bleiben
+/// unverändert; Profile nutzen [`LaunchConfig::for_pane`].
+pub(crate) struct LaunchConfig {
+    pub(crate) program: String,
+    pub(crate) args: Vec<String>,
+    pub(crate) working_directory: String,
+    pub(crate) warnings: Vec<StartupWarning>,
 }
 
 impl LaunchConfig {
-    fn from_environment() -> Result<Self, TerminalError> {
+    /// Erstellt eine [`LaunchConfig`] aus der Umgebung (Phase-1-Verhalten).
+    pub(crate) fn from_environment() -> Result<Self, TerminalError> {
         let (program, shell_fallback) = resolve_shell(env::var_os("SHELL"), Path::new("/bin/sh"))?;
         let (working_directory, directory_fallback) =
             resolve_working_directory(env::current_dir().ok(), env::var_os("HOME"))?;
@@ -224,9 +251,38 @@ impl LaunchConfig {
         }
 
         Ok(Self {
-            arguments: vec![program],
+            program,
+            args: Vec::new(),
             working_directory,
             warnings,
+        })
+    }
+
+    /// Erstellt eine [`LaunchConfig`] aus einem Profil-`StartConfig`.
+    ///
+    /// - `start_config.shell` überschreibt die Standardshell, falls gesetzt.
+    /// - `start_config.command` ersetzt die Standardshell als `argv[0]`
+    ///   und liefert die Argumente.
+    /// - Existenz des Verzeichnisses wird **nicht** geprüft; das ist
+    ///   Aufgabe des Aufrufers (siehe T15 `apply_profile_to_pane`).
+    #[allow(dead_code)] // wird ab T15 von apply_profile_to_pane genutzt
+    pub(crate) fn for_pane(start_config: &StartConfig) -> Result<Self, TerminalError> {
+        let (program, args) = match (&start_config.shell, &start_config.command) {
+            (_, Some(command)) if !command.is_empty() => {
+                (command[0].clone(), command[1..].to_vec())
+            }
+            (Some(shell), _) => (shell.to_string_lossy().into_owned(), Vec::new()),
+            (None, _) => resolve_shell(env::var_os("SHELL"), Path::new("/bin/sh"))
+                .map(|(program, _fallback)| (program, Vec::new()))?,
+        };
+        Ok(Self {
+            program,
+            args,
+            working_directory: start_config
+                .working_directory
+                .to_string_lossy()
+                .into_owned(),
+            warnings: Vec::new(),
         })
     }
 }

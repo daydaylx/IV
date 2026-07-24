@@ -22,6 +22,7 @@ Langlebige Einheiten besitzen stabile, typisierte IDs:
 - `WindowId`
 - `TabId`
 - `PaneId`
+- `SplitId`
 - `ProfileId`
 - `RequestId`
 
@@ -66,11 +67,12 @@ PaneNode = Terminal(TerminalPaneState)
          | Split(SplitState)
 ```
 
-Ein Split besitzt Orientierung, zwei Kinder und ein Teilungsverhältnis.
+Ein Split besitzt eine stabile `SplitId`, Orientierung, zwei Kinder und ein Teilungsverhältnis.
 
 Regeln:
 
 - kein Kind darf vollständig unsichtbar werden
+- Teilungsverhältnisse werden aktuell auf 0,05 bis 0,95 begrenzt
 - leere Split-Knoten sind unzulässig
 - nach dem Schließen eines Kindes wird das verbleibende Kind hochgezogen
 - verschachtelte Splits sind erlaubt
@@ -117,6 +119,7 @@ Nach Strukturänderungen gilt:
 
 - ein neu erstelltes Pane wird aktiv
 - nach dem Schließen wird ein existierendes Nachbar-Pane aktiv
+- das Schließen eines inaktiven Panes verändert das aktive Pane nicht
 - nach dem Schließen eines Tabs wird ein benachbarter Tab aktiv
 
 ## Arbeitsverzeichnisse
@@ -204,4 +207,4 @@ Bei inkonsistentem Zustand:
 - keine Pane-ID erscheint doppelt
 - Teilungsverhältnisse bleiben gültig
 - KI-Zustandsänderungen verändern den Prozesszustand nicht
-- Prozessende entfernt das Pane nicht automatisch
+- erfolgreicher Shell-Exit schließt das betroffene Pane beziehungsweise den Tab; Nichtnullstatus und Signale bleiben sichtbar

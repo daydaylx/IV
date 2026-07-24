@@ -6,7 +6,9 @@ IV verwendet eine kleine, nachvollziehbare TOML-Konfiguration mit sicheren Stand
 
 ## Speicherorte
 
-Die endgültigen XDG-Pfade werden bei Implementierung festgelegt. Es gelten die Linux-XDG-Konventionen für Konfiguration, Daten, Cache und Logs.
+Die implementierte Datei liegt unter `$XDG_CONFIG_HOME/iv/config.toml`. Ohne gesetztes `XDG_CONFIG_HOME` verwendet GLib den XDG-Standardpfad, üblicherweise `~/.config/iv/config.toml`.
+
+Die Datei wird beim Start asynchron über GIO geladen. Fehlt sie, startet IV ohne Meldung mit Standardwerten. Lese-, TOML- und Validierungsfehler werden ohne Dateiinhalt in einer kurzen Statusmeldung angezeigt.
 
 ## Grundregeln
 
@@ -14,36 +16,23 @@ Die endgültigen XDG-Pfade werden bei Implementierung festgelegt. Es gelten die 
 - unbekannte Felder erzeugen höchstens eine Warnung
 - ungültige Werte werden einzeln ersetzt, statt die ganze Datei abzulehnen
 - Konfigurationsänderungen sind versionierbar
-- bestehende Konfigurationen werden bei Schemaänderungen migriert oder verständlich abgelehnt
+- künftige Schemaänderungen benötigen Migration oder eine verständliche Ablehnung
 - keine automatische zerstörende Überschreibung beschädigter Dateien
 
-## Geplante Bereiche
+## Implementiertes Schema
 
 ```toml
+[font]
+family = "monospace"
+size = 12.0
+
 [appearance]
-theme = "system"
-font_family = "monospace"
-font_size = 12.0
-
-[terminal]
-shell = "/bin/zsh"
-scrollback_lines = 10000
-open_links = true
-
-[behavior]
-confirm_close_running_process = true
-restore_last_layout = false
-
-[ai]
-enabled = false
-endpoint = "https://example.invalid/v1"
-model = ""
-
-[keybindings]
-# benutzerdefinierte Überschreibungen
+theme = "system" # "system", "light" oder "dark"
 ```
 
-Dies ist ein Richtungsbeispiel, noch kein unveränderliches Schema.
+Die Schriftgröße muss endlich sein und zwischen 6 und 72 Punkt liegen. Ungültige Felder fallen einzeln auf `monospace`, 12 Punkt beziehungsweise das Systemfarbschema zurück. Unbekannte Felder werden derzeit ignoriert.
+
+Terminal-, Verhaltens-, KI-, Tastenkürzel- und Profilbereiche sind noch nicht implementiert.
 
 ## Secrets
 
@@ -51,35 +40,30 @@ Der API-Key wird über eine stabile Keyring-Kennung referenziert. Die Konfigurat
 
 ## Validierung
 
-Zu validieren sind mindestens:
+Aktuell validiert:
 
-- Schriftgröße in sinnvollem Bereich
-- Scrollback-Limit
+- nicht leere Schriftfamilie
+- Schriftgröße im Bereich 6 bis 72 Punkt
 - erlaubte Theme-Werte
-- gültige URL-Schemes für Provider
-- existierende oder bewusst fehlende Shell
-- eindeutige Tastenkürzel
-- gültige Startprofilpfade
-- Layoutstruktur gemäß Zustandsmodell
+- TOML-Struktur und Feldtypen
+
+Weitere Werte wie Scrollback-Limit, Shell, Provider-URL, Tastenkürzel, Profile und Layouts werden erst validiert, wenn diese Konfigurationsbereiche implementiert werden.
 
 ## Laufzeitänderungen
 
-Sofort anwendbar:
+Beim Anwendungsstart auf alle vorhandenen und danach neu erstellten Panes angewendet:
 
 - Theme
 - Schriftgröße
-- Sichtbarkeit der Statusleiste
-- einige Tastenkürzel
+- Schriftfamilie
 
-Nur für neue Panes oder nach Neustart:
+Eine Laufzeitbeobachtung der Datei und eine Einstellungsoberfläche sind nicht implementiert; Änderungen werden nach einem Neustart wirksam.
 
-- Standardshell
-- Startumgebung
-- bestimmte Backendoptionen
+## Profile und Layouts
 
-Die UI muss kenntlich machen, wann eine Änderung wirksam wird.
+Das `workspace`-Modul enthält bereits versionierte, validierte Datenmodelle und asynchronen Storage für `$XDG_CONFIG_HOME/iv/workspace/profiles.toml` und `layout.toml`. Unbekannte Schema-Versionen oder beschädigte Dateien werden beim Speichern nicht überschrieben.
 
-## Profile
+Diese Grundlage ist noch nicht an die Anwendungsstartsequenz oder eine Profil-UI angebunden. Profile und Layouts sind daher noch kein nutzbares Produktverhalten.
 
 Startprofile werden getrennt von globalen Einstellungen modelliert und enthalten nur:
 
@@ -96,11 +80,11 @@ Profile enthalten keine Secrets.
 
 Bei Parse- oder Validierungsfehlern:
 
-1. genaue Stelle und Ursache bestimmen
-2. sichere Standardwerte verwenden
-3. Anwendung soweit möglich starten
-4. Nutzer auf die fehlerhafte Datei hinweisen
-5. Originaldatei nicht ungefragt überschreiben
+1. betroffene Fehlerklasse bestimmen, ohne Dateiinhalt zu protokollieren
+2. sichere Standardwerte pro Feld verwenden
+3. Anwendung starten
+4. Nutzer über die Statuszeile hinweisen
+5. Originaldatei nicht überschreiben
 
 ## Tests
 
@@ -110,6 +94,6 @@ Bei Parse- oder Validierungsfehlern:
 - unbekannte Felder
 - ungültige Typen
 - Grenzwerte
-- alte Schemaversion
-- beschädigte Profile
-- keine Secrets in Serialisierung
+- beschädigtes Gesamtdokument
+
+Alte Schemaversionen, Profile und Serialisierung werden erst mit den entsprechenden Funktionen testpflichtig.

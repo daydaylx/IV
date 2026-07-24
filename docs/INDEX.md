@@ -32,6 +32,11 @@ Vor jeder Aufgabe:
 | [`TEST_STRATEGY.md`](TEST_STRATEGY.md) | Testebenen, Kernfälle und Regressionen |
 | [`PERFORMANCE_BUDGET.md`](PERFORMANCE_BUDGET.md) | Messziele und Performance-Szenarien |
 | [`DEPENDENCY_POLICY.md`](DEPENDENCY_POLICY.md) | Aufnahme und Pflege von Abhängigkeiten |
+| [`MODULE_STRUCTURE.md`](MODULE_STRUCTURE.md) | aktuelle Modulaufteilung und erlaubte Abhängigkeiten |
+| [`ASYNC_MODEL.md`](ASYNC_MODEL.md) | GLib-Hauptkontext, Hintergrundarbeit und Abbruch |
+| [`ERROR_HANDLING.md`](ERROR_HANDLING.md) | Fehlerklassen, Übersetzung und Nutzerwirkung |
+| [`CONFIGURATION.md`](CONFIGURATION.md) | implementiertes TOML-Schema, XDG-Pfad und Validierung |
+| [`CONTEXT_LEDGER.md`](CONTEXT_LEDGER.md) | bestätigte dauerhafte Projektentscheidungen |
 | [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) | bestätigte und bewusst akzeptierte Einschränkungen |
 | [`DEFINITION_OF_DONE.md`](DEFINITION_OF_DONE.md) | Abschlusskriterien einer Änderung |
 | [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md) | Freigabe einer Version oder testbaren Zwischenversion |
@@ -44,7 +49,7 @@ Vor jeder Aufgabe:
 | GTK4, libadwaita oder allgemeine UI | `ARCHITECTURE.md`, `UX_PRINCIPLES.md` |
 | VTE, PTY, Shellstart oder Prozessende | `TERMINAL_BACKEND.md`, `STATE_MODEL.md`, `TEST_STRATEGY.md` |
 | Tabs, Splits oder Fokus | `STATE_MODEL.md`, `KEYBINDINGS.md`, `TEST_STRATEGY.md` |
-| Einstellungen, Profile oder Persistenz | `ARCHITECTURE.md`, `SECURITY.md`, passende ADRs |
+| Einstellungen, Profile oder Persistenz | `ARCHITECTURE.md`, `CONFIGURATION.md`, `ASYNC_MODEL.md`, `SECURITY.md`, passende ADRs |
 | KI-Kontext, Streaming oder Befehlsvorschläge | `AI_INTEGRATION.md`, `SECURITY.md`, `LOGGING.md`, `TEST_STRATEGY.md` |
 | Netzwerk, Keyring, Secrets, Links oder Zwischenablage | `SECURITY.md`, `LOGGING.md`, `TEST_STRATEGY.md` |
 | Performance oder Speicherverbrauch | `PERFORMANCE_BUDGET.md`, `TEST_STRATEGY.md` |

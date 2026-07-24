@@ -1,5 +1,7 @@
 use adw::prelude::*;
 
+pub(crate) mod startup;
+
 const APPLICATION_ID: &str = "io.github.daydaylx.IV";
 
 pub(crate) fn run() -> gtk::glib::ExitCode {

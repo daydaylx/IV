@@ -4,7 +4,7 @@ IV ist ein nativer, leichtgewichtiger Terminal-Emulator für Linux mit moderner,
 
 Das Terminal bleibt jederzeit der Mittelpunkt. KI, Startprofile und Layouts sind ergänzende Funktionen und dürfen den normalen Terminalbetrieb weder verlangsamen noch komplizierter machen.
 
-> **Aktueller Stand:** Phase 0 ist als technischer Prototyp implementiert. IV startet ein natives Fenster mit genau einem VTE-Terminal und einer lokalen Shell. Details und noch offene Plattformprüfungen: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
+> **Aktueller Stand:** Der Funktionskern von Phase 1 ist implementiert: lokale Shells, Tabs, verschachtelte Splits, Suche, sichere HTTP(S)-Links sowie Schrift- und Theme-Einstellungen. Die Phase bleibt bis zu den noch offenen Wayland- und Langzeittests in Stabilisierung. Details: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
 ## Projektziel
 
@@ -105,6 +105,8 @@ Direkte Rust-Abhängigkeiten bleiben bewusst klein:
 - `libadwaita` für Anwendung und Hauptfenster, ohne zusätzliche Features
 - `vte4` für Terminal, PTY und Shell-Prozess, ohne zusätzliche Features
 - `libc` ausschließlich für die kontrollierten POSIX-Signale beim Schließen
+- `serde` für die versionierten Phase-2-Workspace-Datenstrukturen
+- `toml` für das kleine, feldweise validierte Einstellungsschema
 
 ## Geplanter MVP
 
@@ -179,16 +181,20 @@ Details: [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md) und [`docs/SECURITY.
 
 Die vollständigen Ziele und Abschlusskriterien stehen in [`docs/ROADMAP.md`](docs/ROADMAP.md). Die aktuelle Phase steht ausschließlich in [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
-## Implementierter Umfang von Phase 0
+## Implementierter Umfang
 
 - eine native GTK4-/libadwaita-Anwendung
-- ein Hauptfenster mit genau einem VTE-Terminal
+- ein Hauptfenster mit mehreren Terminal-Tabs und verschachtelten Splits
 - robuste Auswahl von `$SHELL` mit `/bin/sh` als geprüftem Fallback
 - Eingabe, Ausgabe, Auswahl, Copy, Paste und automatisches Terminal-Resize
+- tastaturbediente Tab- und Pane-Navigation
+- Literalsuche im aktiven Terminal-Scrollback
+- ausschließlich validierte HTTP(S)-Links per `Ctrl+Click`
+- asynchron geladene TOML-Einstellungen für Schrift und Farbschema
 - sichtbare Start-, Clipboard- und Prozessfehler
 - nichtblockierender, abgestufter Prozessabschluss
 
-Tabs, Splits, Profile, Persistenz, Einstellungen, KI, ein alternatives Backend und zusätzliche Plattformen bleiben ausdrücklich späteren Phasen vorbehalten.
+Vollbild, Profile, Layoutpersistenz, KI, ein alternatives Backend und zusätzliche Plattformen bleiben ausdrücklich offen oder späteren Phasen vorbehalten.
 
 ## Dokumentation
 

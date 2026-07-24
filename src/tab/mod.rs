@@ -1,4 +1,5 @@
 use crate::pane::{Direction as PaneDirection, Orientation as PaneOrientation, PaneId, PaneTree};
+use crate::workspace::StartConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TabId(u64);
@@ -7,14 +8,22 @@ impl TabId {
     pub(crate) fn new(id: u64) -> Self {
         Self(id)
     }
+
+    #[allow(dead_code, reason = "used by the not-yet-wired Phase-2 layout adapter")]
+    pub(crate) fn as_u64(self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct TabInfo {
     pub(crate) id: TabId,
-    #[allow(dead_code)]
     pub(crate) title: String,
     pub(crate) pane_tree: PaneTree,
+    #[allow(dead_code, reason = "reserved for the Phase-2 layout adapter")]
+    pub(crate) custom_title: Option<String>,
+    #[allow(dead_code, reason = "reserved for the Phase-2 layout adapter")]
+    pub(crate) start_config: Option<StartConfig>,
 }
 
 impl TabInfo {
@@ -23,6 +32,8 @@ impl TabInfo {
             id,
             title,
             pane_tree,
+            custom_title: None,
+            start_config: None,
         }
     }
 }
@@ -50,6 +61,25 @@ impl TabCollection {
         }
     }
 
+    #[allow(dead_code, reason = "used by the not-yet-wired Phase-2 layout adapter")]
+    pub(crate) fn from_tabs(tabs: Vec<TabInfo>, active_index: usize) -> Option<Self> {
+        if tabs.is_empty() {
+            return Some(Self::new());
+        }
+
+        let next_id = tabs
+            .iter()
+            .map(|tab| tab.id.as_u64())
+            .max()
+            .and_then(|id| id.checked_add(1))?;
+        let active_index = active_index.min(tabs.len() - 1);
+        Some(Self {
+            tabs,
+            active_index,
+            next_id,
+        })
+    }
+
     /// Adds a new tab at the end and activates it. Returns its id and index.
     pub(crate) fn add(&mut self) -> (TabId, usize) {
         let id = TabId::new(self.next_id);
@@ -69,8 +99,12 @@ impl TabCollection {
         let index = self.tabs.iter().position(|t| t.id == id)?;
         let tab = self.tabs.remove(index);
 
-        if !self.tabs.is_empty() && self.active_index >= self.tabs.len() {
-            self.active_index = self.tabs.len() - 1;
+        if !self.tabs.is_empty() {
+            if index < self.active_index {
+                self.active_index -= 1;
+            } else if self.active_index >= self.tabs.len() {
+                self.active_index = self.tabs.len() - 1;
+            }
         }
 
         Some(tab)
@@ -222,6 +256,21 @@ mod tests {
         c.remove(id2);
         assert_eq!(c.len(), 2);
         assert_eq!(c.active_index(), 0);
+    }
+
+    #[test]
+    fn removing_tab_before_active_preserves_active_id() {
+        let mut c = TabCollection::new();
+        let (id1, _) = c.add();
+        let (id2, _) = c.add();
+        c.add();
+        c.set_active(2);
+        assert_eq!(c.active_id(), id2);
+
+        c.remove(id1);
+
+        assert_eq!(c.active_id(), id2);
+        assert_eq!(c.active_index(), 1);
     }
 
     #[test]

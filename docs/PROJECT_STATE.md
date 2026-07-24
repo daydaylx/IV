@@ -4,12 +4,12 @@
 
 ## Status
 
-- **Projektstatus:** Phase-1-Einstellungen implementiert und kompiliert
-- **Aktuelle Phase:** Phase 1 – Terminal-MVP (Tabs + Splits + Suche + Links + Einstellungen fertig; Profile/Layouts noch offen)
-- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs und Pane-Splits
+- **Projektstatus:** Phase-1-Funktionskern implementiert; Stabilisierung und Akzeptanztests laufen
+- **Aktuelle Phase:** Phase 1 – Terminal-MVP
+- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs, verschachtelten Pane-Splits, Suche, Links und Einstellungen
 - **Primäre Plattform:** Linux mit Wayland
 - **Terminal-Backend im MVP:** VTE
-- **Letzte Dokumentprüfung:** 25. Juli 2026
+- **Letzte Dokumentprüfung:** 24. Juli 2026
 
 ## Implementiert
 
@@ -21,6 +21,7 @@
 - Tab schließen: `Ctrl+Shift+W`; letzter Tab schließt das Fenster
 - Tab-Wechsel: `Ctrl+PageDown` / `Ctrl+PageUp` (zyklisch)
 - Tab-Titel wird aus VTE `window_title_changed` abgeleitet
+- stabile Notebook-Seiten; strukturelle Pane-Änderungen verwenden dieselben VTE-Widgets ohne Doppelstart oder Reparenting-Warnung
 - Fokus automatisch auf Terminal nach Tab-Erstellen und Tab-Wechsel
 - ein Hauptfenster mit `adw::HeaderBar`, `gtk::Notebook` und Statuszeile
 - lokale Shell aus einer gültigen, absoluten und ausführbaren `SHELL`-Variable
@@ -34,33 +35,39 @@
 - `exit 0` im letzten Tab schließt das Fenster; in anderen Tabs wird nur der Tab geschlossen
 - Signal oder Nichtnullstatus bleibt sichtbar und deaktiviert weitere Eingabe
 - nichtblockierender Fensterabschluss: alle Tabs erhalten `SIGHUP`, nach 1,5 s `SIGKILL`, nach 2,5 s endgültige UI-Freigabe
+- mehrere gleichzeitige Schließanforderungen werden bis zum tatsächlichen Prozessende gemeinsam abgeschlossen
 - VTE-Typen ausschließlich im privaten Adapter `terminal/vte_backend.rs`
 - Pane-Domänenschicht (`PaneTree`, `PaneNode`, `PaneId`, `Direction`) ohne GTK-/VTE-Abhängigkeiten
-- Pane-Tree mit Terminal-Blättern und Split-Knoten (Horizontal/Vertikal)
+- Pane-Tree mit Terminal-Blättern und stabil identifizierten Split-Knoten (Horizontal/Vertikal)
 - horizontaler Split: `Ctrl+Shift+Right`
 - vertikaler Split: `Ctrl+Shift+Down`
 - Pane schließen: `Ctrl+Shift+Q`; letztes Pane schließt den Tab
 - Pane-Fokuswechsel: `Alt+Left/Right/Up/Down` (nicht-zyklisch)
 - visuelle Hervorhebung des aktiven Panes via CSS-Klasse `active-pane`
 - rekursiver Widget-Baum aus `PaneTree`: `gtk::Paned`-Container, Pane-Resize per Drag-Handle
+- Split-Verhältnisse werden im Zustandsmodell aktualisiert und auf 0,05 bis 0,95 begrenzt
 - PaneTree-Invarianten: kein leeres Split, Hochziehen nach Schließen, aktives Pane immer gültig
-- Suche im Scrollback via `Ctrl+Shift+F` mit `gtk::SearchBar` und `gtk::Entry`
+- Suche im Scrollback via `Ctrl+Shift+F` mit `gtk::SearchBar` und `gtk::SearchEntry`
 - Literal-Substring-Suche mit VTE-Regex; `Enter` = nächster Treffer, `Shift+Enter` = vorheriger Treffer; `Escape` = Suche schließen
 - Suche wird bei Pane-/Tab-Wechsel, Split und Schließen automatisch zurückgesetzt
 - Suchleiste räumt per `search_set_regex(None)` sauber auf; nach Schließen Fokus auf Terminal
-- Anklickbare URLs: `https?://`-Regex-Matching via VTE `match_add_regex` + OSC-8-Hyperlinks
+- Anklickbare URLs: `https?://`-Regex-Matching via VTE `match_add_regex` + OSC-8-Hyperlinks; nur vollständige HTTP(S)-URIs mit Host werden weitergegeben
 - `Ctrl+Click` auf URL öffnet diese im Standardbrowser via `gio::AppInfo::launch_default_for_uri`
 - Mauszeiger wechselt zu Pointer über erkannten URLs
-- TOML-Einstellungsdatei unter `~/.config/iv/config.toml`
+- asynchron über GIO geladene TOML-Einstellungsdatei unter `$XDG_CONFIG_HOME/iv/config.toml`
 - Schriftart (`font.family`, Default: `monospace`) und Schriftgröße (`font.size`, Default: `12.0`)
 - Farbschema (`appearance.theme`: `system`/`light`/`dark`) via `adw::StyleManager`
+- feldweise Validierung mit sichtbaren, typisierten Warnungen und sicheren Standardwerten
 - Schriftzoom: `Ctrl++` / `Ctrl+-` / `Ctrl+0` via VTE `font_scale` (0.5–4.0)
+- getrennte UI-Module für Aktionen, Links, Suche und Fenster-/Session-Lifecycle
+- testbare Phase-2-Grundlage in `workspace/`: versionierte Profile und Layout-Snapshots, Schema-/Pfadvalidierung sowie asynchrones, ersetzendes GIO-Schreiben
+- Workspace-Dateien mit unbekannter Version oder beschädigtem TOML werden nicht überschrieben
 
 ## Geprüft
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-targets --all-features` (43 Tests: 5 Search-Regex + 21 PaneTree + 12 TabCollection + 5 Terminal)
+- `cargo test --all-targets --all-features` (91 Unit-Tests)
 - `cargo build`
 - Unit-Tests für `PaneTree`: Split, Close, Fokusnavigation, Invarianten, IDs
 - Unit-Tests für `TabCollection`: hinzufügen, entfernen, aktiv setzen, next/prev, Randfälle
@@ -75,9 +82,11 @@
 - sichtbarer Nichtnullstatus 130 ohne unkontrollierten Anwendungsabbruch (Phase 0)
 - Fensterschließen während laufender und verschachtelter Shell-Prozesse (Phase 0)
 - anschließend keine verbleibenden IV-, Shell- oder Zombie-Prozesse (Phase 0)
+- automatisierter Xvfb-Smoke-Test am 24. Juli 2026: zwei verschachtelte Splits, neuer Tab, Nichtnull-Exit, Schließen des beendeten Tabs, Suche und In-App-Fensterabschluss
+- dabei erwartete Shellprozesszahlen 1 → 2 → 3 → 4 → 3 und keine GTK-, GLib-, GDK- oder VTE-Warnungen
 
 Die manuellen Desktopprüfungen liefen unter X11. Wayland bleibt die primäre Zielumgebung, wurde in dieser Umgebung aber nicht manuell ausgeführt.
-Die neuen Tab-Funktionen (T10) benötigen manuelle Desktop-Prüfung vor Abschluss.
+Xvfb meldete lediglich die erwarteten libEGL-Hinweise wegen fehlender DRI3-Hardwarebeschleunigung.
 
 ## Noch offen
 
@@ -86,18 +95,19 @@ Die neuen Tab-Funktionen (T10) benötigen manuelle Desktop-Prüfung vor Abschlus
 - manuelle Desktop-Prüfung der URL-Links (Ctrl+Click)
 - manuelle Desktop-Prüfung der Suchleiste
 - manuelle Desktop-Prüfung der Split-Funktionen
+- manuelle Langzeitprüfung mit Pi Agent sowie Codex CLI oder Claude Code
+- Vollbild
 - manuelle Wiederholung der Phase-0- und Phase-1-Desktopprüfungen unter Wayland
 - ein automatisierter echter VTE-/PTY-Integrationstest
 - reproduzierbare Prüfung des seltenen `SIGKILL`-Timeoutpfads
-- Startprofile und Layoutpersistenz
+- Anbindung der Workspace-Grundlage an Startsequenz, Terminalstart und Profil-UI
 - KI-Provider, Streaming oder Kontextfilter
-- Vollbild
 - reproduzierbare Performance-Messungen
 - Paketierung oder Releaseprozess
 
 ## Nächster technischer Schritt
 
-Startprofile und Layoutpersistenz (Phase 2): Gespeicherte Tab-/Split-Layouts, letztes Arbeitsverzeichnis, optionale Shell pro Profil. Danach KI-Assistent (Phase 3).
+Die vollständige Phase-1-Desktop- und Langzeittestmatrix unter Wayland ausführen und dokumentieren; erst danach die Phase-2-Grundlage an das Produkt anbinden.
 
 ## Regel zur Aktualisierung
 

@@ -1,9 +1,30 @@
+use std::collections::HashSet;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct PaneId(u64);
 
 impl PaneId {
     pub(crate) fn new(id: u64) -> Self {
         Self(id)
+    }
+
+    #[allow(dead_code, reason = "used by the not-yet-wired Phase-2 layout adapter")]
+    pub(crate) fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SplitId(u64);
+
+impl SplitId {
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    #[allow(dead_code, reason = "used by the not-yet-wired Phase-2 layout adapter")]
+    pub(crate) fn as_u64(self) -> u64 {
+        self.0
     }
 }
 
@@ -28,6 +49,7 @@ pub(crate) enum PaneNode {
         title: String,
     },
     Split {
+        id: SplitId,
         orientation: Orientation,
         /// Position of the divider, 0.0–1.0 (fraction of space given to first child).
         ratio: f64,
@@ -47,9 +69,13 @@ pub(crate) struct PaneTree {
     root: PaneNode,
     active_id: PaneId,
     next_id: u64,
+    next_split_id: u64,
 }
 
 impl PaneTree {
+    pub(crate) const MIN_SPLIT_RATIO: f64 = 0.05;
+    pub(crate) const MAX_SPLIT_RATIO: f64 = 0.95;
+
     /// Creates a new tree with a single terminal pane.
     pub(crate) fn new() -> Self {
         let id = PaneId::new(0);
@@ -60,7 +86,40 @@ impl PaneTree {
             },
             active_id: id,
             next_id: 1,
+            next_split_id: 0,
         }
+    }
+
+    /// Restores a tree from validated persisted nodes.
+    ///
+    /// Duplicate IDs, non-finite ratios and ratios outside the supported
+    /// range are rejected. The first terminal becomes active because the
+    /// persisted snapshot does not currently store pane focus.
+    #[allow(dead_code, reason = "used by the not-yet-wired Phase-2 layout adapter")]
+    pub(crate) fn from_root(root: PaneNode) -> Option<Self> {
+        let mut pane_ids = HashSet::new();
+        let mut split_ids = HashSet::new();
+        if !validate_restored_node(&root, &mut pane_ids, &mut split_ids) {
+            return None;
+        }
+
+        let active_id = find_first_leaf(&root);
+        let next_id = pane_ids
+            .iter()
+            .map(|id| id.as_u64())
+            .max()?
+            .checked_add(1)?;
+        let next_split_id = match split_ids.iter().map(|id| id.as_u64()).max() {
+            Some(id) => id.checked_add(1)?,
+            None => 0,
+        };
+
+        Some(Self {
+            root,
+            active_id,
+            next_id,
+            next_split_id,
+        })
     }
 
     // ------------------------------------------------------------------
@@ -82,6 +141,10 @@ impl PaneTree {
 
     pub(crate) fn contains(&self, id: PaneId) -> bool {
         contains(&self.root, id)
+    }
+
+    pub(crate) fn title(&self, id: PaneId) -> Option<&str> {
+        title_in(&self.root, id)
     }
 
     /// Number of terminal leaves (actual shell panes).
@@ -110,7 +173,15 @@ impl PaneTree {
     /// Returns the id of the newly created pane.
     pub(crate) fn split_active(&mut self, orientation: Orientation) -> PaneId {
         let new_id = self.allocate_id();
-        split_node(&mut self.root, self.active_id, orientation, new_id);
+        let split_id = self.allocate_split_id();
+        let split = split_node(
+            &mut self.root,
+            self.active_id,
+            split_id,
+            orientation,
+            new_id,
+        );
+        debug_assert!(split, "active pane must exist in the pane tree");
         self.active_id = new_id;
         new_id
     }
@@ -119,10 +190,16 @@ impl PaneTree {
     /// returns `None` (the caller should close the tab/window).
     /// Otherwise returns the new active PaneId.
     pub(crate) fn close_active(&mut self) -> Option<PaneId> {
-        if self.is_single() {
+        self.close(self.active_id)
+    }
+
+    /// Closes a pane by id. Closing an inactive pane preserves the current active pane.
+    pub(crate) fn close(&mut self, id: PaneId) -> Option<PaneId> {
+        if self.is_single() || !self.contains(id) {
             return None;
         }
 
+        let previous_active = self.active_id;
         let (new_root, new_active) = close_node(
             std::mem::replace(
                 &mut self.root,
@@ -131,12 +208,16 @@ impl PaneTree {
                     title: String::new(),
                 },
             ),
-            self.active_id,
+            id,
         );
 
         self.root = new_root;
-        self.active_id = new_active;
-        Some(new_active)
+        self.active_id = if id == previous_active {
+            new_active
+        } else {
+            previous_active
+        };
+        Some(self.active_id)
     }
 
     /// Moves focus in the given direction. Returns true if focus changed.
@@ -161,6 +242,18 @@ impl PaneTree {
         ids
     }
 
+    pub(crate) fn set_split_ratio(&mut self, id: SplitId, ratio: f64) -> bool {
+        if !ratio.is_finite() {
+            return false;
+        }
+
+        set_split_ratio_in(
+            &mut self.root,
+            id,
+            ratio.clamp(Self::MIN_SPLIT_RATIO, Self::MAX_SPLIT_RATIO),
+        )
+    }
+
     // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
@@ -168,6 +261,12 @@ impl PaneTree {
     fn allocate_id(&mut self) -> PaneId {
         let id = PaneId::new(self.next_id);
         self.next_id += 1;
+        id
+    }
+
+    fn allocate_split_id(&mut self) -> SplitId {
+        let id = SplitId::new(self.next_split_id);
+        self.next_split_id += 1;
         id
     }
 }
@@ -192,7 +291,13 @@ fn count_leaves(node: &PaneNode) -> usize {
 }
 
 /// Splits the pane with `target_id` in-place. Does nothing if not found.
-fn split_node(node: &mut PaneNode, target_id: PaneId, orientation: Orientation, new_id: PaneId) {
+fn split_node(
+    node: &mut PaneNode,
+    target_id: PaneId,
+    split_id: SplitId,
+    orientation: Orientation,
+    new_id: PaneId,
+) -> bool {
     if let PaneNode::Terminal { id, .. } = node
         && *id == target_id
     {
@@ -205,6 +310,7 @@ fn split_node(node: &mut PaneNode, target_id: PaneId, orientation: Orientation, 
             },
         );
         *node = PaneNode::Split {
+            id: split_id,
             orientation,
             ratio: 0.5,
             first: Box::new(old),
@@ -213,12 +319,17 @@ fn split_node(node: &mut PaneNode, target_id: PaneId, orientation: Orientation, 
                 title: String::from("IV"),
             }),
         };
+        true
     } else if let PaneNode::Split { first, second, .. } = node {
         if contains(first, target_id) {
-            split_node(first, target_id, orientation, new_id);
+            split_node(first, target_id, split_id, orientation, new_id)
         } else if contains(second, target_id) {
-            split_node(second, target_id, orientation, new_id);
+            split_node(second, target_id, split_id, orientation, new_id)
+        } else {
+            false
         }
+    } else {
+        false
     }
 }
 
@@ -239,6 +350,7 @@ fn close_node(node: PaneNode, target_id: PaneId) -> (PaneNode, PaneId) {
         }
         term @ PaneNode::Terminal { .. } => (term, PaneId::new(u64::MAX)),
         PaneNode::Split {
+            id,
             orientation,
             ratio,
             first,
@@ -259,6 +371,7 @@ fn close_node(node: PaneNode, target_id: PaneId) -> (PaneNode, PaneId) {
                 let (new_first, active) = close_node(*first, target_id);
                 (
                     PaneNode::Split {
+                        id,
                         orientation,
                         ratio,
                         first: Box::new(new_first),
@@ -270,6 +383,7 @@ fn close_node(node: PaneNode, target_id: PaneId) -> (PaneNode, PaneId) {
                 let (new_second, active) = close_node(*second, target_id);
                 (
                     PaneNode::Split {
+                        id,
                         orientation,
                         ratio,
                         first,
@@ -280,6 +394,7 @@ fn close_node(node: PaneNode, target_id: PaneId) -> (PaneNode, PaneId) {
             } else {
                 (
                     PaneNode::Split {
+                        id,
                         orientation,
                         ratio,
                         first,
@@ -316,12 +431,63 @@ fn set_title_in(node: &mut PaneNode, id: PaneId, title: String) {
     }
 }
 
+fn title_in(node: &PaneNode, id: PaneId) -> Option<&str> {
+    match node {
+        PaneNode::Terminal { id: node_id, title } if *node_id == id => Some(title),
+        PaneNode::Terminal { .. } => None,
+        PaneNode::Split { first, second, .. } => {
+            title_in(first, id).or_else(|| title_in(second, id))
+        }
+    }
+}
+
 fn collect_ids(node: &PaneNode, out: &mut Vec<PaneId>) {
     match node {
         PaneNode::Terminal { id, .. } => out.push(*id),
         PaneNode::Split { first, second, .. } => {
             collect_ids(first, out);
             collect_ids(second, out);
+        }
+    }
+}
+
+#[allow(dead_code, reason = "used by PaneTree::from_root for Phase-2 restore")]
+fn validate_restored_node(
+    node: &PaneNode,
+    pane_ids: &mut HashSet<PaneId>,
+    split_ids: &mut HashSet<SplitId>,
+) -> bool {
+    match node {
+        PaneNode::Terminal { id, .. } => pane_ids.insert(*id),
+        PaneNode::Split {
+            id,
+            ratio,
+            first,
+            second,
+            ..
+        } => {
+            split_ids.insert(*id)
+                && ratio.is_finite()
+                && (PaneTree::MIN_SPLIT_RATIO..=PaneTree::MAX_SPLIT_RATIO).contains(ratio)
+                && validate_restored_node(first, pane_ids, split_ids)
+                && validate_restored_node(second, pane_ids, split_ids)
+        }
+    }
+}
+
+fn set_split_ratio_in(node: &mut PaneNode, id: SplitId, ratio: f64) -> bool {
+    match node {
+        PaneNode::Terminal { .. } => false,
+        PaneNode::Split {
+            id: node_id,
+            ratio: node_ratio,
+            ..
+        } if *node_id == id => {
+            *node_ratio = ratio;
+            true
+        }
+        PaneNode::Split { first, second, .. } => {
+            set_split_ratio_in(first, id, ratio) || set_split_ratio_in(second, id, ratio)
         }
     }
 }
@@ -558,6 +724,20 @@ mod tests {
         assert!(!tree.is_single());
     }
 
+    #[test]
+    fn closing_inactive_pane_preserves_active_pane() {
+        let mut tree = PaneTree::new();
+        let first = tree.active_id();
+        let second = tree.split_active(Orientation::Horizontal);
+        let third = tree.split_active(Orientation::Vertical);
+        assert_eq!(tree.active_id(), third);
+
+        assert_eq!(tree.close(second), Some(third));
+        assert_eq!(tree.active_id(), third);
+        assert!(tree.contains(first));
+        assert!(!tree.contains(second));
+    }
+
     // -- Focus navigation -------------------------------------------------
 
     #[test]
@@ -667,6 +847,76 @@ mod tests {
         let original = tree.active_id();
         tree.set_title(PaneId::new(999), String::from("nope"));
         assert_eq!(tree.active_id(), original);
+    }
+
+    #[test]
+    fn title_returns_the_requested_pane_title() {
+        let mut tree = PaneTree::new();
+        let first = tree.active_id();
+        let second = tree.split_active(Orientation::Horizontal);
+        tree.set_title(first, "first".to_owned());
+        tree.set_title(second, "second".to_owned());
+
+        assert_eq!(tree.title(first), Some("first"));
+        assert_eq!(tree.title(second), Some("second"));
+        assert_eq!(tree.title(PaneId::new(999)), None);
+    }
+
+    #[test]
+    fn split_ratio_is_clamped_and_rejects_non_finite_values() {
+        let mut tree = PaneTree::new();
+        tree.split_active(Orientation::Horizontal);
+        let split_id = match tree.root() {
+            PaneNode::Split { id, .. } => *id,
+            PaneNode::Terminal { .. } => panic!("expected split root"),
+        };
+
+        assert!(tree.set_split_ratio(split_id, 0.0));
+        assert!(matches!(
+            tree.root(),
+            PaneNode::Split { ratio, .. } if *ratio == PaneTree::MIN_SPLIT_RATIO
+        ));
+        assert!(tree.set_split_ratio(split_id, 1.0));
+        assert!(matches!(
+            tree.root(),
+            PaneNode::Split { ratio, .. } if *ratio == PaneTree::MAX_SPLIT_RATIO
+        ));
+        assert!(!tree.set_split_ratio(split_id, f64::NAN));
+    }
+
+    #[test]
+    fn restored_tree_rejects_invalid_state_and_continues_ids() {
+        let root = PaneNode::Split {
+            id: SplitId::new(7),
+            orientation: Orientation::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Terminal {
+                id: PaneId::new(4),
+                title: "left".to_owned(),
+            }),
+            second: Box::new(PaneNode::Terminal {
+                id: PaneId::new(9),
+                title: "right".to_owned(),
+            }),
+        };
+        let mut tree = PaneTree::from_root(root).expect("valid restored tree");
+        assert_eq!(tree.active_id(), PaneId::new(4));
+        assert_eq!(tree.split_active(Orientation::Vertical), PaneId::new(10));
+
+        let duplicate = PaneNode::Split {
+            id: SplitId::new(0),
+            orientation: Orientation::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Terminal {
+                id: PaneId::new(1),
+                title: String::new(),
+            }),
+            second: Box::new(PaneNode::Terminal {
+                id: PaneId::new(1),
+                title: String::new(),
+            }),
+        };
+        assert!(PaneTree::from_root(duplicate).is_none());
     }
 
     // -- IDs --------------------------------------------------------------

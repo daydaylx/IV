@@ -8,7 +8,7 @@ Eine Einschränkung darf erst als behoben entfernt werden, wenn Implementierung 
 
 ## Aktueller Projektstand
 
-IV befindet sich in Planung und technischer Vorbereitung. Der belastbare Rust-/GTK4-/VTE-Anwendungskern ist noch nicht als implementiert vorauszusetzen.
+Der Rust-/GTK4-/VTE-Anwendungskern und die vorgesehenen Phase-1-Kernfunktionen sind implementiert. Phase 1 ist wegen offener Wayland-, Langzeit- und realer TUI-Prüfungen noch nicht abgeschlossen.
 
 Aktuelle Details: [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
@@ -24,7 +24,7 @@ Aktuelle Details: [`PROJECT_STATE.md`](PROJECT_STATE.md).
 - VTE ist die einzige produktive Terminalimplementierung des MVP.
 - Ein Backendwechsel zur Laufzeit ist nicht vorgesehen.
 - Es gibt im MVP keinen eigenen Terminalparser und keinen eigenen GPU-Renderer.
-- Die konzeptuelle Backend-Schnittstelle muss während Phase 0 gegen die tatsächlichen GTK-/VTE-Bindings geprüft werden.
+- VTE ist hinter einer internen `Terminal`-Fassade gekapselt; eine austauschbare Laufzeit-Backendauswahl gibt es nicht.
 
 ## Prozesse und Sitzungen
 
@@ -33,6 +33,7 @@ Aktuelle Details: [`PROJECT_STATE.md`](PROJECT_STATE.md).
 - Das aktuelle Arbeitsverzeichnis kann technisch unbekannt sein.
 - Ist das aktuelle Verzeichnis unbekannt oder ungültig, muss auf einen bestätigten Startpfad zurückgefallen werden.
 - Vollständige Wiederaufnahme einer laufenden Shell nach einem Anwendungsneustart ist nicht vorgesehen.
+- Die Daten- und Storage-Grundlage für Startprofile und Layoutpersistenz ist vorhanden, aber noch nicht an Startsequenz, Terminalstart oder UI angebunden.
 
 ## KI-Unterstützung
 
@@ -57,6 +58,10 @@ Die verbindlichen Grenzen stehen in [`AI_INTEGRATION.md`](AI_INTEGRATION.md) und
 - Die Terminalfläche bleibt dominant; permanente IDE-Seitenleisten oder Chatblöcke sind nicht vorgesehen.
 - Kernfunktionen müssen ohne Maus erreichbar sein.
 - Sehr komplexe Sitzungs-, Projekt- oder Fensterverwaltung ist kein Ziel des MVP.
+- Vollbild ist noch nicht implementiert.
+- Die Scrollback-Suche ist case-sensitive und durchsucht genau das Pane, in dem sie geöffnet wurde.
+- Pane-Größen lassen sich derzeit nur über den `gtk::Paned`-Griff mit der Maus verändern.
+- Die Kürzel `Alt+Pfeiltaste` und `Ctrl+Shift+Q` können mit Terminalprogrammen kollidieren.
 
 ## Pflege
 

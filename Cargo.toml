@@ -12,4 +12,3 @@ libc = "0.2"
 vte = { package = "vte4", version = "0.10.0", default-features = false, features = ["v0_70"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
-dirs = "6"

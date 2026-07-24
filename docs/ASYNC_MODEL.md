@@ -75,7 +75,14 @@ Task-Fehler werden in typisierte Anwendungsergebnisse übersetzt. Ein fehlgeschl
 
 ## Runtime
 
-Das Projekt verwendet höchstens eine allgemeine Async-Runtime. Die konkrete Wahl wird bei Implementierung dokumentiert. Es wird keine zweite Runtime nur für einzelne Bibliotheken eingeführt, sofern dies vermeidbar ist.
+Aktuell verwendet IV den GLib-Hauptkontext und die asynchronen GIO-/VTE-APIs:
+
+- Shellprozesse starten über `vte::Terminal::spawn_async`.
+- Die TOML-Datei wird über `gio::File::load_contents_future` geladen.
+- Die Phase-2-Workspace-Grundlage lädt und ersetzt Profil-/Layoutdateien ebenfalls über asynchrone GIO-APIs; die Anbindung an Start und Shutdown ist noch offen.
+- Ergebnisse werden nur angewendet, wenn der zugehörige schwache UI-Zustand noch existiert.
+
+Eine zusätzliche allgemeine Async-Runtime ist nicht eingebunden. Künftige Netzwerkarbeit darf höchstens eine solche Runtime ergänzen und muss GTK-/VTE-Objekte weiterhin im GLib-Hauptkontext belassen.
 
 ## Verbote
 

@@ -8,11 +8,12 @@ use gtk::prelude::*;
 use gtk::{gio, glib};
 use vte::prelude::*;
 
-use super::{ProcessExit, TerminalError, TerminalEvent};
+use super::{CloseRequest, ProcessExit, TerminalError, TerminalEvent};
 
 const SPAWN_TIMEOUT_MILLISECONDS: i32 = 10_000;
 const GRACEFUL_CLOSE_DELAY: Duration = Duration::from_millis(1_500);
 const FORCED_CLOSE_DELAY: Duration = Duration::from_millis(2_500);
+const PCRE2_MULTILINE: u32 = 0x0000_0400;
 
 type EventHandler = Rc<dyn Fn(TerminalEvent)>;
 type CloseCallback = Box<dyn FnOnce()>;
@@ -33,7 +34,7 @@ pub(super) struct VteBackend {
     state: Rc<Cell<ProcessState>>,
     cancellable: Rc<RefCell<Option<gio::Cancellable>>>,
     event_handler: Rc<RefCell<Option<EventHandler>>>,
-    close_callback: Rc<RefCell<Option<CloseCallback>>>,
+    close_callbacks: Rc<RefCell<Vec<CloseCallback>>>,
     search_regex: Rc<RefCell<Option<vte::Regex>>>,
 }
 
@@ -51,7 +52,7 @@ impl VteBackend {
             state: Rc::new(Cell::new(ProcessState::Idle)),
             cancellable: Rc::new(RefCell::new(None)),
             event_handler: Rc::new(RefCell::new(None)),
-            close_callback: Rc::new(RefCell::new(None)),
+            close_callbacks: Rc::new(RefCell::new(Vec::new())),
             search_regex: Rc::new(RefCell::new(None)),
         };
         backend.setup_url_matching();
@@ -63,7 +64,7 @@ impl VteBackend {
     fn setup_url_matching(&self) {
         // Match http:// and https:// URLs.
         let url_pattern = r"https?://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]+[-a-zA-Z0-9+&@#/%=~_|]";
-        let Ok(regex) = vte::Regex::for_match(url_pattern, 1 /* PCRE2_CASELESS */) else {
+        let Ok(regex) = vte::Regex::for_match(url_pattern, PCRE2_MULTILINE) else {
             return;
         };
         let tag = self.terminal.match_add_regex(&regex, 0);
@@ -78,7 +79,7 @@ impl VteBackend {
         *self.event_handler.borrow_mut() = Some(handler);
     }
 
-    pub(super) fn spawn(&self, arguments: &[String], working_directory: &str) {
+    pub(super) fn spawn(&self, program: &str, args: &[String], working_directory: &str) {
         if self.state.replace(ProcessState::Starting) != ProcessState::Idle {
             return;
         }
@@ -86,18 +87,23 @@ impl VteBackend {
         let cancellable = gio::Cancellable::new();
         *self.cancellable.borrow_mut() = Some(cancellable.clone());
 
-        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        // Build argv: program first, then any additional arguments.
+        let mut argv: Vec<&str> = Vec::with_capacity(1 + args.len());
+        argv.push(program);
+        for argument in args {
+            argv.push(argument.as_str());
+        }
         let environment = inherited_environment();
         let environment: Vec<&str> = environment.iter().map(String::as_str).collect();
         let state = self.state.clone();
         let stored_cancellable = self.cancellable.clone();
         let event_handler = self.event_handler.clone();
-        let close_callback = self.close_callback.clone();
+        let close_callbacks = self.close_callbacks.clone();
 
         self.terminal.spawn_async(
             vte::PtyFlags::DEFAULT,
             Some(working_directory),
-            &arguments,
+            &argv,
             &environment,
             glib::SpawnFlags::DEFAULT,
             || {},
@@ -121,7 +127,7 @@ impl VteBackend {
                     Err(error) => match state.get() {
                         ProcessState::Closing(_) => {
                             state.set(ProcessState::Failed);
-                            run_close_callback(&close_callback);
+                            run_close_callbacks(&close_callbacks);
                         }
                         ProcessState::Starting => {
                             state.set(ProcessState::Failed);
@@ -173,28 +179,31 @@ impl VteBackend {
         });
     }
 
-    pub(super) fn request_close<F>(&self, on_ready: F) -> bool
+    pub(super) fn request_close<F>(&self, on_ready: F) -> CloseRequest
     where
         F: FnOnce() + 'static,
     {
         match self.state.get() {
-            ProcessState::Idle | ProcessState::Exited | ProcessState::Failed => true,
-            ProcessState::Closing(_) => false,
+            ProcessState::Idle | ProcessState::Exited | ProcessState::Failed => CloseRequest::Ready,
+            ProcessState::Closing(_) => {
+                self.close_callbacks.borrow_mut().push(Box::new(on_ready));
+                CloseRequest::Pending
+            }
             ProcessState::Starting => {
-                *self.close_callback.borrow_mut() = Some(Box::new(on_ready));
+                self.close_callbacks.borrow_mut().push(Box::new(on_ready));
                 self.state.set(ProcessState::Closing(None));
                 if let Some(cancellable) = self.cancellable.borrow().as_ref() {
                     cancellable.cancel();
                 }
                 self.schedule_close_escalation();
-                false
+                CloseRequest::Pending
             }
             ProcessState::Running(pid) => {
-                *self.close_callback.borrow_mut() = Some(Box::new(on_ready));
+                self.close_callbacks.borrow_mut().push(Box::new(on_ready));
                 self.state.set(ProcessState::Closing(Some(pid)));
                 let _ = send_signal(pid, libc::SIGHUP);
                 self.schedule_close_escalation();
-                false
+                CloseRequest::Pending
             }
         }
     }
@@ -206,7 +215,7 @@ impl VteBackend {
         }
 
         let escaped = glib::Regex::escape_string(query);
-        let regex = vte::Regex::for_match(&escaped, 0)
+        let regex = vte::Regex::for_match(&escaped, PCRE2_MULTILINE)
             .map_err(|_err| TerminalError::InvalidSearchPattern)?;
 
         self.terminal.search_set_regex(Some(&regex), 0);
@@ -233,9 +242,18 @@ impl VteBackend {
     }
 
     pub(super) fn hyperlink_at(&self, x: f64, y: f64) -> Option<String> {
-        self.terminal
+        let uri = self
+            .terminal
             .check_hyperlink_at(x, y)
-            .map(|s| s.to_string())
+            .map(|value| value.to_string())
+            .or_else(|| {
+                self.terminal
+                    .check_match_at(x, y)
+                    .0
+                    .map(|value| value.to_string())
+            })?;
+
+        allowed_http_uri(&uri)
     }
 
     pub(super) fn set_font(&self, font_desc: &gtk::pango::FontDescription) {
@@ -255,7 +273,7 @@ impl VteBackend {
     fn connect_child_exit(&self) {
         let state = self.state.clone();
         let event_handler = self.event_handler.clone();
-        let close_callback = self.close_callback.clone();
+        let close_callbacks = self.close_callbacks.clone();
 
         self.terminal.connect_child_exited(move |terminal, status| {
             terminal.set_input_enabled(false);
@@ -263,7 +281,7 @@ impl VteBackend {
             match state.get() {
                 ProcessState::Closing(_) => {
                     state.set(ProcessState::Exited);
-                    run_close_callback(&close_callback);
+                    run_close_callbacks(&close_callbacks);
                 }
                 ProcessState::Exited | ProcessState::Failed => {}
                 _ => {
@@ -286,11 +304,11 @@ impl VteBackend {
         });
 
         let state = self.state.clone();
-        let close_callback = self.close_callback.clone();
+        let close_callbacks = self.close_callbacks.clone();
         glib::timeout_add_local_once(FORCED_CLOSE_DELAY, move || {
             if matches!(state.get(), ProcessState::Closing(_)) {
                 state.set(ProcessState::Exited);
-                run_close_callback(&close_callback);
+                run_close_callbacks(&close_callbacks);
             }
         });
     }
@@ -302,10 +320,24 @@ fn emit_event(handler: &RefCell<Option<EventHandler>>, event: TerminalEvent) {
     }
 }
 
-fn run_close_callback(callback: &RefCell<Option<CloseCallback>>) {
-    if let Some(callback) = callback.borrow_mut().take() {
+fn run_close_callbacks(callbacks: &RefCell<Vec<CloseCallback>>) {
+    let callbacks = std::mem::take(&mut *callbacks.borrow_mut());
+    for callback in callbacks {
         callback();
     }
+}
+
+fn allowed_http_uri(uri: &str) -> Option<String> {
+    let parsed = glib::Uri::parse(uri, glib::UriFlags::NONE).ok()?;
+    let scheme = parsed.scheme();
+    if !matches!(scheme.as_str(), "http" | "https") {
+        return None;
+    }
+    if parsed.host().is_none_or(|host| host.is_empty()) {
+        return None;
+    }
+
+    Some(uri.to_owned())
 }
 
 fn inherited_environment() -> Vec<String> {
@@ -338,7 +370,10 @@ fn send_signal(pid: libc::pid_t, signal: libc::c_int) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::inherited_environment;
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
+
+    use super::{CloseCallback, allowed_http_uri, inherited_environment, run_close_callbacks};
 
     #[test]
     fn terminal_capabilities_override_parent_values() {
@@ -356,5 +391,44 @@ mod tests {
 
         assert_eq!(terminal_values, ["TERM=xterm-256color"]);
         assert_eq!(color_terminal_values, ["COLORTERM=truecolor"]);
+    }
+
+    #[test]
+    fn allows_http_and_https_links() {
+        assert_eq!(
+            allowed_http_uri("https://example.com/path?q=1"),
+            Some("https://example.com/path?q=1".to_owned())
+        );
+        assert_eq!(
+            allowed_http_uri("http://example.com"),
+            Some("http://example.com".to_owned())
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_or_incomplete_links() {
+        assert_eq!(allowed_http_uri("file:///etc/passwd"), None);
+        assert_eq!(allowed_http_uri("javascript:alert(1)"), None);
+        assert_eq!(allowed_http_uri("https:relative"), None);
+        assert_eq!(allowed_http_uri("not a uri"), None);
+    }
+
+    #[test]
+    fn close_callbacks_are_all_drained_exactly_once() {
+        let calls = Rc::new(Cell::new(0));
+        let callbacks: RefCell<Vec<CloseCallback>> = RefCell::new(
+            (0..3)
+                .map(|_| {
+                    let calls = Rc::clone(&calls);
+                    Box::new(move || calls.set(calls.get() + 1)) as CloseCallback
+                })
+                .collect(),
+        );
+
+        run_close_callbacks(&callbacks);
+        run_close_callbacks(&callbacks);
+
+        assert_eq!(calls.get(), 3);
+        assert!(callbacks.borrow().is_empty());
     }
 }
