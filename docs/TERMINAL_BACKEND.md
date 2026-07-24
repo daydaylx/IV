@@ -2,9 +2,9 @@
 
 ## Dokumentstatus
 
-Dieses Dokument beschreibt den geplanten fachlichen Vertrag des MVP-Terminal-Backends. Die dargestellten Operationen und Ereignisnamen sind konzeptuell und keine bereits verbindliche Rust-API.
+Dieses Dokument beschreibt den fachlichen Vertrag des MVP-Terminal-Backends. Die dargestellten Operationen und Ereignisnamen bleiben konzeptuell und sind keine verbindliche Rust-API.
 
-Die tatsächliche Schnittstelle wird in Phase 0 gegen `gtk4-rs`, VTE und den realen Prozesslebenszyklus geprüft. Der Implementierungsstand steht in [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Die kleine tatsächliche Phase-0-Schnittstelle wurde gegen `gtk4-rs`, VTE und den realen Prozesslebenszyklus geprüft. Der Implementierungsstand steht in [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
 ## Ziel
 
@@ -108,7 +108,19 @@ Beim Schließen gilt eine ausdrücklich definierte Policy, beispielsweise:
 - nach einer Frist eskalieren,
 - Nutzer bei erkennbar laufender Aufgabe warnen.
 
-Die konkrete Policy benötigt vor Implementierung eine dokumentierte Entscheidung. Stilles hartes Beenden ist nicht der Standard.
+### Konkrete Policy in Phase 0
+
+Phase 0 verwendet eine feste, nichtblockierende Schließsequenz:
+
+1. Ein noch laufender Shell-Prozess erhält `SIGHUP`.
+2. GTK und VTE verarbeiten Prozessereignisse weiter; der Hauptthread wartet nicht blockierend.
+3. Ist derselbe Prozesszustand nach 1,5 Sekunden noch aktiv, folgt `SIGKILL`.
+4. Nach insgesamt 2,5 Sekunden wird das Fenster auch dann freigegeben, wenn kein weiteres VTE-Ereignis eingetroffen ist.
+5. Verspätete oder doppelte Spawn- und Exit-Ereignisse werden anhand des Zustands ignoriert.
+
+Ein noch startender Spawn wird zunächst über `gio::Cancellable` abgebrochen und unterliegt derselben begrenzten Abschlusssequenz. Ein normaler Exitstatus 0 schließt die Phase-0-Anwendung. Ein Nichtnullstatus oder Signal hält das Fenster mit deaktivierter Eingabe und sichtbarer Meldung offen.
+
+Die Signale richten sich in Phase 0 an die von VTE zurückgegebene Shell-PID, nicht an eine selbst verwaltete Prozessgruppe. Eine allgemeine Job- oder Prozessmanagementschicht ist ausdrücklich nicht implementiert.
 
 ## Nebenläufigkeit
 
@@ -147,10 +159,12 @@ Die Erkennung ist bestmöglich und kann fehlschlagen.
 
 `VteBackend` ist die einzige Schicht, die VTE-spezifische Typen und Signale kennen darf.
 
+Die konkrete Phase-0-Abhängigkeit lautet:
+
 Erlaubte Abhängigkeit:
 
 ```text
-UI/Application -> TerminalBackend -> VteBackend -> VTE
+Application -> UI -> Terminal -> VteBackend -> VTE
 ```
 
 Nicht erlaubt:
@@ -163,6 +177,10 @@ State model -> VTE widget
 ```
 
 Die Backend-Grenze muss klein bleiben. Sie wird nicht vorsorglich zu einer generischen Multi-Backend-Plattform ausgebaut.
+
+`Terminal` ist dabei eine konkrete interne Fassade und kein vorsorglicher Trait. Die UI erhält von ihr nur ein allgemeines GTK-Widget, typisierte Ereignisse und die aktuell benötigten Operationen Start, Fokus, Copy, Paste und Schließen.
+
+Die vorhandene Prozessumgebung wird ohne Protokollierung an die Shell weitergereicht. Nicht als UTF-8 darstellbare Einträge können über die String-basierte VTE-Bindingschnittstelle nicht übertragen werden. `TERM` und `COLORTERM` werden gezielt auf `xterm-256color` und `truecolor` gesetzt, damit interaktive Programme nicht eine ungeeignete Elternkonfiguration wie `TERM=dumb` übernehmen.
 
 ## Fehler
 

@@ -1,10 +1,10 @@
-# IV – Leichtgewichtiger KI-Terminal-Emulator
+# IV – Leichtgewichtiger Terminal-Emulator
 
 IV ist ein nativer, leichtgewichtiger Terminal-Emulator für Linux mit moderner, reduzierter Oberfläche und optionaler KI-Unterstützung.
 
 Das Terminal bleibt jederzeit der Mittelpunkt. KI, Startprofile und Layouts sind ergänzende Funktionen und dürfen den normalen Terminalbetrieb weder verlangsamen noch komplizierter machen.
 
-> **Aktueller Stand:** Planung und technische Vorbereitung für Phase 0. Der belastbare Rust-/GTK4-/VTE-Anwendungskern ist noch nicht als implementiert vorauszusetzen. Details: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
+> **Aktueller Stand:** Phase 0 ist als technischer Prototyp implementiert. IV startet ein natives Fenster mit genau einem VTE-Terminal und einer lokalen Shell. Details und noch offene Plattformprüfungen: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
 ## Projektziel
 
@@ -63,7 +63,48 @@ Die verbindlichen Grenzen für Coding-Agenten stehen in [`AGENTS.md`](AGENTS.md)
 - **Secrets:** System-Keyring
 - **Hintergrundarbeit:** asynchron und vom GTK-Hauptthread getrennt
 
-VTE wird hinter einer internen `TerminalBackend`-Grenze gekapselt. Ein späterer Backendwechsel bleibt möglich, ist aber kein Bestandteil des MVP.
+VTE wird hinter einer kleinen internen `Terminal`-Fassade gekapselt. Ein späterer Backendwechsel bleibt möglich, ist aber kein Bestandteil des MVP.
+
+## Lokal bauen und starten
+
+Benötigt werden eine Rust-Toolchain ab Version 1.92 sowie die Entwicklungsdateien für GTK4, libadwaita und VTE GTK4. Unter Debian oder Ubuntu:
+
+```bash
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev libvte-2.91-gtk4-dev
+```
+
+Rust lässt sich beispielsweise mit `rustup` installieren:
+
+```bash
+rustup toolchain install stable
+rustup default stable
+```
+
+Danach im Repository:
+
+```bash
+cargo build
+cargo run
+cargo test --all-targets --all-features
+```
+
+Die vollständigen lokalen Qualitätsprüfungen sind:
+
+```bash
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+cargo build
+```
+
+Fehler wie `The system library gtk4 was not found` oder entsprechende Meldungen für `libadwaita-1` und `vte-2.91-gtk4` bedeuten in der Regel, dass das jeweilige Entwicklungspaket fehlt. Bei einer Installation außerhalb der Systempfade muss außerdem `PKG_CONFIG_PATH` auf die zugehörigen `.pc`-Dateien zeigen.
+
+Direkte Rust-Abhängigkeiten bleiben bewusst klein:
+
+- `gtk4` für Fenster-Widgets und Aktionen; nur das System-API-Level `v4_10` ist aktiviert
+- `libadwaita` für Anwendung und Hauptfenster, ohne zusätzliche Features
+- `vte4` für Terminal, PTY und Shell-Prozess, ohne zusätzliche Features
+- `libc` ausschließlich für die kontrollierten POSIX-Signale beim Schließen
 
 ## Geplanter MVP
 
@@ -138,17 +179,16 @@ Details: [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md) und [`docs/SECURITY.
 
 Die vollständigen Ziele und Abschlusskriterien stehen in [`docs/ROADMAP.md`](docs/ROADMAP.md). Die aktuelle Phase steht ausschließlich in [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
-## Nächster Meilenstein
+## Implementierter Umfang von Phase 0
 
-Der nächste technische Schritt ist eine minimale GTK4/libadwaita-Anwendung mit genau einem VTE-Terminal und sauberem Shell-Prozesslebenszyklus.
+- eine native GTK4-/libadwaita-Anwendung
+- ein Hauptfenster mit genau einem VTE-Terminal
+- robuste Auswahl von `$SHELL` mit `/bin/sh` als geprüftem Fallback
+- Eingabe, Ausgabe, Auswahl, Copy, Paste und automatisches Terminal-Resize
+- sichtbare Start-, Clipboard- und Prozessfehler
+- nichtblockierender, abgestufter Prozessabschluss
 
-Noch nicht Teil dieses Schritts:
-
-- Tabs und Splits
-- Profile und Persistenz
-- KI
-- alternatives Terminal-Backend
-- zusätzliche Plattformen
+Tabs, Splits, Profile, Persistenz, Einstellungen, KI, ein alternatives Backend und zusätzliche Plattformen bleiben ausdrücklich späteren Phasen vorbehalten.
 
 ## Dokumentation
 

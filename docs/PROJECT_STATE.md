@@ -4,72 +4,65 @@
 
 ## Status
 
-- **Projektstatus:** Planung und technische Vorbereitung
+- **Projektstatus:** Phase-0-Prototyp implementiert und lokal geprüft
 - **Aktuelle Phase:** Phase 0 – technischer Prototyp
-- **Implementierungsstand:** noch kein belastbarer Rust-/GTK4-/VTE-Anwendungskern im Repository
+- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit genau einem Terminal
 - **Primäre Plattform:** Linux mit Wayland
 - **Terminal-Backend im MVP:** VTE
 - **Letzte Dokumentprüfung:** 24. Juli 2026
 
-## Bereits festgelegt
+## Implementiert
 
-- Produktziel und klare Nicht-Ziele
-- Rust, GTK4, libadwaita und VTE als MVP-Technologien
-- Kapselung von VTE hinter einer internen Backend-Grenze
-- fachliches Zielmodell für Tabs, Splits und Prozesse
-- optionale und vom Terminalkern getrennte KI-Integration
-- Sicherheits-, Logging-, Test- und Performancegrundsätze
-- Agentenrollen für Architektur, Implementierung, Review, Tests und Sicherheit
+- Cargo-Projekt mit Rust 2024 und deklarierter Mindestversion Rust 1.92
+- native libadwaita-Anwendung mit Anwendungs-ID `io.github.daydaylx.IV`
+- ein Hauptfenster mit genau einem dominanten VTE-Terminal
+- lokale Shell aus einer gültigen, absoluten und ausführbaren `SHELL`-Variable
+- `/bin/sh` als validierter Fallback mit sichtbarer Warnung
+- validiertes aktuelles Startverzeichnis mit Fallback auf `HOME` und anschließend `/`
+- asynchroner VTE-Spawn mit zehn Sekunden Timeout und abbrechbarem Start
+- normale Terminalein- und -ausgabe, GTK/VTE-Resize, Auswahl, Copy und Paste
+- Copy/Paste-Aktionen `Ctrl+Shift+C` und `Ctrl+Shift+V`
+- Fokus auf dem Terminal nach dem Programmstart
+- typisierte Start-, Spawn- und Clipboardfehler mit kurzen Nutzertexten
+- genau eine Verarbeitung des Shell-Endes
+- `exit 0` schließt das Fenster; Signal oder Nichtnullstatus bleibt sichtbar und deaktiviert weitere Eingabe
+- nichtblockierender Fensterabschluss: `SIGHUP`, nach 1,5 Sekunden `SIGKILL`, nach insgesamt 2,5 Sekunden endgültige UI-Freigabe
+- VTE-Typen ausschließlich im privaten Adapter `terminal/vte_backend.rs`
 
-Diese Festlegungen sind Planungsgrundlage. Sie belegen noch keine vollständige Implementierung.
+## Geprüft
 
-## Noch nicht als implementiert voraussetzen
+- `cargo fmt --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --all-targets --all-features`
+- `cargo build`
+- nativer Start in einer Linux-X11-Desktop-Sitzung mit bash
+- ungültige `SHELL`-Variable und sichtbarer `/bin/sh`-Fallback
+- Tastatureingabe und Terminalausgabe
+- Unicode, Emoji und breite CJK-Zeichen
+- Fenster- und Terminal-Resize von 1022 × 722 auf 780 × 540 Pixel
+- Auswahl sowie Copy und Paste über die vorgesehenen Tastenkürzel
+- interaktive Nutzung von `less`, `htop` und Vim über `vi`
+- regulärer Shell-Exit mit Status 0
+- sichtbarer Nichtnullstatus 130 ohne unkontrollierten Anwendungsabbruch
+- Fensterschließen während laufender und verschachtelter Shell-Prozesse
+- anschließend keine verbleibenden IV-, Shell- oder Zombie-Prozesse
 
-- stabile GTK4/libadwaita-Anwendung
-- vollständige VTE- und PTY-Integration
+Die manuellen Desktopprüfungen liefen unter X11. Wayland bleibt die primäre Zielumgebung, wurde in dieser Umgebung aber nicht manuell ausgeführt.
+
+## Noch offen
+
+- manuelle Wiederholung der Phase-0-Desktopprüfungen unter Wayland
+- ein automatisierter echter VTE-/PTY-Integrationstest
+- reproduzierbare Prüfung des seltenen `SIGKILL`-Timeoutpfads
 - Tabs und Splits
 - Startprofile und Layoutpersistenz
 - KI-Provider, Streaming oder Kontextfilter
-- belastbare automatisierte Testabdeckung
 - reproduzierbare Performance-Messungen
 - Paketierung oder Releaseprozess
 
-Agenten dürfen diese Bereiche nicht als vorhanden behandeln, bevor Code und Tests dies belegen.
+## Nächster technischer Schritt
 
-## Nächster technischer Meilenstein
-
-Eine minimale GTK4/libadwaita-Anwendung, die genau ein VTE-Terminal einbettet und eine lokale Standardshell zuverlässig startet.
-
-### Umfang
-
-- minimale Rust-Projektstruktur
-- Anwendungsstart und ein Fenster
-- ein VTE-Terminal
-- bash oder zsh starten
-- Eingabe und Ausgabe
-- Copy und Paste
-- Resize
-- kontrollierter Prozess- und Ressourcenabschluss
-- verständliche Fehler bei ungültiger Shell oder ungültigem Startverzeichnis
-
-### Nicht-Ziele dieses Meilensteins
-
-- Tabs oder Splits
-- Einstellungen und Profile
-- Sitzungswiederherstellung
-- KI-Integration
-- alternatives Terminal-Backend
-- Plugin-System
-- allgemeine Zukunftsarchitektur ohne aktuellen Bedarf
-
-### Abschlusskriterien
-
-- bash und zsh starten zuverlässig
-- `vim` oder `nvim`, `less` und `htop` sind nutzbar
-- Unicode und breite Zeichen funktionieren
-- Resize beschädigt die Darstellung nicht
-- das Schließen hinterlässt keine Zombie-Prozesse
-- Terminal- und Prozessfehler beenden die Anwendung nicht unkontrolliert
+In Phase 1 den vorhandenen Einzelterminal-Container in einen ersten Tab-Container überführen, ohne bereits Splits einzuführen.
 
 ## Regel zur Aktualisierung
 
