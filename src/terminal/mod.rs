@@ -63,6 +63,47 @@ impl Terminal {
     {
         self.backend.request_close(on_ready)
     }
+
+    /// Sets the search regex from a literal query string.
+    /// Escapes special regex characters so the user types a plain substring.
+    pub(crate) fn search(&self, query: &str) -> Result<(), TerminalError> {
+        self.backend.search(query)
+    }
+
+    /// Finds the next match (forward direction).
+    pub(crate) fn search_next(&self) -> bool {
+        self.backend.search_next()
+    }
+
+    /// Finds the previous match (backward direction).
+    pub(crate) fn search_previous(&self) -> bool {
+        self.backend.search_previous()
+    }
+
+    /// Clears the search and search highlighting.
+    pub(crate) fn search_clear(&self) {
+        self.backend.search_clear();
+    }
+
+    /// Returns the URI at the given coordinates, if any (OSC 8 hyperlink or regex match).
+    pub(crate) fn hyperlink_at(&self, x: f64, y: f64) -> Option<String> {
+        self.backend.hyperlink_at(x, y)
+    }
+
+    /// Set the base font for this terminal.
+    pub(crate) fn set_font(&self, font_desc: &gtk::pango::FontDescription) {
+        self.backend.set_font(font_desc);
+    }
+
+    /// Adjust the font scale (1.0 = base, >1.0 = larger, <1.0 = smaller).
+    pub(crate) fn zoom_font(&self, delta: f64) {
+        self.backend.zoom_font(delta);
+    }
+
+    /// Reset font scale to 1.0.
+    pub(crate) fn reset_font_zoom(&self) {
+        self.backend.reset_font_zoom();
+    }
 }
 
 #[derive(Debug)]
@@ -112,6 +153,7 @@ pub(crate) enum TerminalError {
     Spawn(gtk::glib::Error),
     ClipboardUnavailable,
     NoSelection,
+    InvalidSearchPattern,
 }
 
 impl TerminalError {
@@ -122,6 +164,7 @@ impl TerminalError {
             Self::Spawn(_) => "Die lokale Shell konnte nicht gestartet werden.",
             Self::ClipboardUnavailable => "Die Zwischenablage ist nicht verfügbar.",
             Self::NoSelection => "Es ist kein Text zum Kopieren ausgewählt.",
+            Self::InvalidSearchPattern => "Das Suchmuster ist ungültig.",
         }
     }
 }
@@ -246,6 +289,7 @@ fn usable_directory(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gtk::glib;
 
     #[test]
     fn configured_shell_is_used_when_executable() {
@@ -296,5 +340,51 @@ mod tests {
             ProcessExit::from_wait_status(libc::SIGTERM),
             ProcessExit::Signal(15)
         );
+    }
+
+    #[test]
+    fn regex_escape_literal_dots() {
+        let escaped = glib::Regex::escape_string("hello.txt");
+        assert_eq!(escaped, r"hello\.txt");
+    }
+
+    #[test]
+    fn regex_escape_special_chars() {
+        let escaped = glib::Regex::escape_string(r"[test] (foo) *bar? +baz. ^$");
+        assert!(escaped.contains(r"\["));
+        assert!(escaped.contains(r"\("));
+        assert!(escaped.contains(r"\*"));
+        assert!(escaped.contains(r"\?"));
+        assert!(escaped.contains(r"\."));
+        assert!(escaped.contains(r"\^"));
+        assert!(escaped.contains(r"\$"));
+    }
+
+    #[test]
+    fn regex_escape_leaves_alphanumeric_unchanged() {
+        let escaped = glib::Regex::escape_string("hello123");
+        assert_eq!(escaped, "hello123");
+    }
+
+    #[test]
+    fn regex_new_valid_escaped_string() {
+        let escaped = glib::Regex::escape_string("test");
+        let regex = glib::Regex::new(
+            &escaped,
+            glib::RegexCompileFlags::DEFAULT,
+            glib::RegexMatchFlags::empty(),
+        );
+        assert!(regex.is_ok());
+        assert!(regex.unwrap().is_some());
+    }
+
+    #[test]
+    fn regex_new_empty_string() {
+        let regex = glib::Regex::new(
+            "",
+            glib::RegexCompileFlags::DEFAULT,
+            glib::RegexMatchFlags::empty(),
+        );
+        assert!(regex.is_ok());
     }
 }

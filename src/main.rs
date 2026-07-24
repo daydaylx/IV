@@ -1,4 +1,6 @@
 mod app;
+mod pane;
+mod settings;
 mod tab;
 mod terminal;
 mod ui;

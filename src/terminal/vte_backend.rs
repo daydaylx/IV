@@ -34,6 +34,7 @@ pub(super) struct VteBackend {
     cancellable: Rc<RefCell<Option<gio::Cancellable>>>,
     event_handler: Rc<RefCell<Option<EventHandler>>>,
     close_callback: Rc<RefCell<Option<CloseCallback>>>,
+    search_regex: Rc<RefCell<Option<vte::Regex>>>,
 }
 
 impl VteBackend {
@@ -42,15 +43,31 @@ impl VteBackend {
         terminal.set_hexpand(true);
         terminal.set_vexpand(true);
 
+        // Enable OSC 8 hyperlinks.
+        terminal.set_allow_hyperlink(true);
+
         let backend = Self {
             terminal,
             state: Rc::new(Cell::new(ProcessState::Idle)),
             cancellable: Rc::new(RefCell::new(None)),
             event_handler: Rc::new(RefCell::new(None)),
             close_callback: Rc::new(RefCell::new(None)),
+            search_regex: Rc::new(RefCell::new(None)),
         };
+        backend.setup_url_matching();
         backend.connect_child_exit();
         backend
+    }
+
+    /// Register a URL-matching regex so plain URLs get highlighted.
+    fn setup_url_matching(&self) {
+        // Match http:// and https:// URLs.
+        let url_pattern = r"https?://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]+[-a-zA-Z0-9+&@#/%=~_|]";
+        let Ok(regex) = vte::Regex::for_match(url_pattern, 1 /* PCRE2_CASELESS */) else {
+            return;
+        };
+        let tag = self.terminal.match_add_regex(&regex, 0);
+        self.terminal.match_set_cursor_name(tag, "pointer");
     }
 
     pub(super) fn widget(&self) -> gtk::Widget {
@@ -180,6 +197,59 @@ impl VteBackend {
                 false
             }
         }
+    }
+
+    pub(super) fn search(&self, query: &str) -> Result<(), TerminalError> {
+        if query.is_empty() {
+            self.search_clear();
+            return Ok(());
+        }
+
+        let escaped = glib::Regex::escape_string(query);
+        let regex = vte::Regex::for_match(&escaped, 0)
+            .map_err(|_err| TerminalError::InvalidSearchPattern)?;
+
+        self.terminal.search_set_regex(Some(&regex), 0);
+        self.terminal.search_set_wrap_around(true);
+        *self.search_regex.borrow_mut() = Some(regex);
+
+        // Jump to first match.
+        self.terminal.search_find_next();
+
+        Ok(())
+    }
+
+    pub(super) fn search_next(&self) -> bool {
+        self.terminal.search_find_next()
+    }
+
+    pub(super) fn search_previous(&self) -> bool {
+        self.terminal.search_find_previous()
+    }
+
+    pub(super) fn search_clear(&self) {
+        self.terminal.search_set_regex(None, 0);
+        *self.search_regex.borrow_mut() = None;
+    }
+
+    pub(super) fn hyperlink_at(&self, x: f64, y: f64) -> Option<String> {
+        self.terminal
+            .check_hyperlink_at(x, y)
+            .map(|s| s.to_string())
+    }
+
+    pub(super) fn set_font(&self, font_desc: &gtk::pango::FontDescription) {
+        self.terminal.set_font_desc(Some(font_desc));
+    }
+
+    pub(super) fn zoom_font(&self, delta: f64) {
+        let scale = self.terminal.font_scale() + delta;
+        let clamped = scale.clamp(0.5, 4.0);
+        self.terminal.set_font_scale(clamped);
+    }
+
+    pub(super) fn reset_font_zoom(&self) {
+        self.terminal.set_font_scale(1.0);
     }
 
     fn connect_child_exit(&self) {

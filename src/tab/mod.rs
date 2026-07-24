@@ -1,3 +1,5 @@
+use crate::pane::{Direction as PaneDirection, Orientation as PaneOrientation, PaneId, PaneTree};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TabId(u64);
 
@@ -10,12 +12,18 @@ impl TabId {
 #[derive(Debug, Clone)]
 pub(crate) struct TabInfo {
     pub(crate) id: TabId,
+    #[allow(dead_code)]
     pub(crate) title: String,
+    pub(crate) pane_tree: PaneTree,
 }
 
 impl TabInfo {
-    pub(crate) fn new(id: TabId, title: String) -> Self {
-        Self { id, title }
+    pub(crate) fn new(id: TabId, title: String, pane_tree: PaneTree) -> Self {
+        Self {
+            id,
+            title,
+            pane_tree,
+        }
     }
 }
 
@@ -29,10 +37,14 @@ pub(crate) struct TabCollection {
 }
 
 impl TabCollection {
-    /// Creates a new collection with a single initial tab.
+    /// Creates a new collection with a single initial tab containing one pane.
     pub(crate) fn new() -> Self {
         Self {
-            tabs: vec![TabInfo::new(TabId::new(0), String::from("IV"))],
+            tabs: vec![TabInfo::new(
+                TabId::new(0),
+                String::from("IV"),
+                PaneTree::new(),
+            )],
             active_index: 0,
             next_id: 1,
         }
@@ -43,7 +55,8 @@ impl TabCollection {
         let id = TabId::new(self.next_id);
         self.next_id += 1;
         let index = self.tabs.len();
-        self.tabs.push(TabInfo::new(id, String::from("IV")));
+        self.tabs
+            .push(TabInfo::new(id, String::from("IV"), PaneTree::new()));
         self.active_index = index;
         (id, index)
     }
@@ -110,10 +123,51 @@ impl TabCollection {
         self.tabs.iter().position(|t| t.id == id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn set_title(&mut self, id: TabId, title: String) {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.title = title;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Pane delegation (active tab)
+    // ------------------------------------------------------------------
+
+    pub(crate) fn active_pane_id(&self) -> PaneId {
+        self.tabs[self.active_index].pane_tree.active_id()
+    }
+
+    /// Splits the active pane of the active tab. Returns the new PaneId.
+    pub(crate) fn split_active(&mut self, orientation: PaneOrientation) -> PaneId {
+        self.tabs[self.active_index]
+            .pane_tree
+            .split_active(orientation)
+    }
+
+    /// Closes the active pane of the active tab.
+    /// Returns the new active PaneId, or None if it was the last pane.
+    pub(crate) fn close_active_pane(&mut self) -> Option<PaneId> {
+        self.tabs[self.active_index].pane_tree.close_active()
+    }
+
+    /// Moves pane focus in the given direction within the active tab.
+    pub(crate) fn move_pane_focus(&mut self, direction: PaneDirection) -> bool {
+        self.tabs[self.active_index].pane_tree.move_focus(direction)
+    }
+
+    pub(crate) fn pane_tree_for_tab(&self, tab_id: TabId) -> Option<&PaneTree> {
+        self.tabs
+            .iter()
+            .find(|t| t.id == tab_id)
+            .map(|t| &t.pane_tree)
+    }
+
+    pub(crate) fn pane_tree_for_tab_mut(&mut self, tab_id: TabId) -> Option<&mut PaneTree> {
+        self.tabs
+            .iter_mut()
+            .find(|t| t.id == tab_id)
+            .map(|t| &mut t.pane_tree)
     }
 }
 

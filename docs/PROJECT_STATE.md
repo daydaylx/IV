@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Projektstatus:** Phase-1-Tab-Container implementiert und kompiliert
-- **Aktuelle Phase:** Phase 1 – Terminal-MVP (Tab-Container fertig; Splits, Suche, Links, Einstellungen noch offen)
-- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit mehreren Terminal-Tabs
+- **Projektstatus:** Phase-1-Einstellungen implementiert und kompiliert
+- **Aktuelle Phase:** Phase 1 – Terminal-MVP (Tabs + Splits + Suche + Links + Einstellungen fertig; Profile/Layouts noch offen)
+- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs und Pane-Splits
 - **Primäre Plattform:** Linux mit Wayland
 - **Terminal-Backend im MVP:** VTE
 - **Letzte Dokumentprüfung:** 25. Juli 2026
@@ -35,13 +35,34 @@
 - Signal oder Nichtnullstatus bleibt sichtbar und deaktiviert weitere Eingabe
 - nichtblockierender Fensterabschluss: alle Tabs erhalten `SIGHUP`, nach 1,5 s `SIGKILL`, nach 2,5 s endgültige UI-Freigabe
 - VTE-Typen ausschließlich im privaten Adapter `terminal/vte_backend.rs`
+- Pane-Domänenschicht (`PaneTree`, `PaneNode`, `PaneId`, `Direction`) ohne GTK-/VTE-Abhängigkeiten
+- Pane-Tree mit Terminal-Blättern und Split-Knoten (Horizontal/Vertikal)
+- horizontaler Split: `Ctrl+Shift+Right`
+- vertikaler Split: `Ctrl+Shift+Down`
+- Pane schließen: `Ctrl+Shift+Q`; letztes Pane schließt den Tab
+- Pane-Fokuswechsel: `Alt+Left/Right/Up/Down` (nicht-zyklisch)
+- visuelle Hervorhebung des aktiven Panes via CSS-Klasse `active-pane`
+- rekursiver Widget-Baum aus `PaneTree`: `gtk::Paned`-Container, Pane-Resize per Drag-Handle
+- PaneTree-Invarianten: kein leeres Split, Hochziehen nach Schließen, aktives Pane immer gültig
+- Suche im Scrollback via `Ctrl+Shift+F` mit `gtk::SearchBar` und `gtk::Entry`
+- Literal-Substring-Suche mit VTE-Regex; `Enter` = nächster Treffer, `Shift+Enter` = vorheriger Treffer; `Escape` = Suche schließen
+- Suche wird bei Pane-/Tab-Wechsel, Split und Schließen automatisch zurückgesetzt
+- Suchleiste räumt per `search_set_regex(None)` sauber auf; nach Schließen Fokus auf Terminal
+- Anklickbare URLs: `https?://`-Regex-Matching via VTE `match_add_regex` + OSC-8-Hyperlinks
+- `Ctrl+Click` auf URL öffnet diese im Standardbrowser via `gio::AppInfo::launch_default_for_uri`
+- Mauszeiger wechselt zu Pointer über erkannten URLs
+- TOML-Einstellungsdatei unter `~/.config/iv/config.toml`
+- Schriftart (`font.family`, Default: `monospace`) und Schriftgröße (`font.size`, Default: `12.0`)
+- Farbschema (`appearance.theme`: `system`/`light`/`dark`) via `adw::StyleManager`
+- Schriftzoom: `Ctrl++` / `Ctrl+-` / `Ctrl+0` via VTE `font_scale` (0.5–4.0)
 
 ## Geprüft
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test --all-targets --all-features` (17 Tests: 12 TabCollection + 5 Terminal)
+- `cargo test --all-targets --all-features` (43 Tests: 5 Search-Regex + 21 PaneTree + 12 TabCollection + 5 Terminal)
 - `cargo build`
+- Unit-Tests für `PaneTree`: Split, Close, Fokusnavigation, Invarianten, IDs
 - Unit-Tests für `TabCollection`: hinzufügen, entfernen, aktiv setzen, next/prev, Randfälle
 - nativer Start in einer Linux-X11-Desktop-Sitzung mit bash (Phase 0)
 - ungültige `SHELL`-Variable und sichtbarer `/bin/sh`-Fallback (Phase 0)
@@ -60,12 +81,14 @@ Die neuen Tab-Funktionen (T10) benötigen manuelle Desktop-Prüfung vor Abschlus
 
 ## Noch offen
 
+- manuelle Desktop-Prüfung der Schrift- und Theme-Einstellungen
+- manuelle Desktop-Prüfung des Schriftzooms
+- manuelle Desktop-Prüfung der URL-Links (Ctrl+Click)
+- manuelle Desktop-Prüfung der Suchleiste
+- manuelle Desktop-Prüfung der Split-Funktionen
 - manuelle Wiederholung der Phase-0- und Phase-1-Desktopprüfungen unter Wayland
 - ein automatisierter echter VTE-/PTY-Integrationstest
 - reproduzierbare Prüfung des seltenen `SIGKILL`-Timeoutpfads
-- Splits (horizontal/vertikal)
-- Suche im Scrollback, anklickbare Links
-- Schrift- und Theme-Einstellungen
 - Startprofile und Layoutpersistenz
 - KI-Provider, Streaming oder Kontextfilter
 - Vollbild
@@ -74,7 +97,7 @@ Die neuen Tab-Funktionen (T10) benötigen manuelle Desktop-Prüfung vor Abschlus
 
 ## Nächster technischer Schritt
 
-Splits (Phase 1, nächster Teil): Horizontale und vertikale Teilung eines Tabs in mehrere Panes, Pane-Fokuswechsel, Pane-Größenänderung. Danach Suche, Links und Einstellungen.
+Startprofile und Layoutpersistenz (Phase 2): Gespeicherte Tab-/Split-Layouts, letztes Arbeitsverzeichnis, optionale Shell pro Profil. Danach KI-Assistent (Phase 3).
 
 ## Regel zur Aktualisierung
 
