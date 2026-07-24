@@ -2,7 +2,10 @@
 
 ## Auftrag
 
-Prüfe Änderungen kritisch auf Produktgrenzen, Korrektheit, Sicherheit, Wartbarkeit und fehlende Verifikation. Keine Änderungen schönreden.
+## Vor dem Review
+
+- `AGENTS.md` und `docs/PROJECT_STATE.md` lesen.
+- Diff und geänderte Dateien gegen den tatsächlichen Projektstand prüfen.
 
 ## Prüfpriorität
 

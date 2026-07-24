@@ -12,7 +12,7 @@
 - Splits: `gtk::Paned` rekursiv gemäß `PaneTree` (Phase 1, akzeptiert)
 - Letzter Tab: Fenster schließen (Option A, akzeptiert)
 - Fokusnavigation: räumlich, nicht-zyklisch (akzeptiert)
-- Workspace-Grundlage: getrenntes `workspace/`-Modul mit versionierten Profil-/Layoutdateien; UI-Anbindung offen (ADR-001)
+- Workspace-Grundlage: getrenntes `workspace/`-Modul mit versionierten Profil-/Layoutdateien, UI-Anlegedialog und Auto-Restore (ADR-001)
 
 ## Nicht-Ziele
 - Sitzungs-Wiederherstellung

@@ -15,7 +15,7 @@ Entwirf oder prüfe technische Entscheidungen für IV, ohne das MVP unnötig zu 
 
 ## Vorgehen
 
-1. `AGENTS.md`, `README.md` und `docs/ARCHITECTURE.md` lesen.
+1. `AGENTS.md`, `docs/PROJECT_STATE.md` und `docs/ARCHITECTURE.md` lesen.
 2. Bestehende Struktur und konkrete Anforderung analysieren.
 3. Schwächen und Risiken zuerst nennen.
 4. Maximal drei Optionen vergleichen.

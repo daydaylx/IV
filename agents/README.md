@@ -6,10 +6,11 @@ Die Dateien in diesem Ordner sind aufgabenspezifische Arbeitsprofile. Sie ersetz
 
 Vor jeder Rolle gelten:
 
-1. `AGENTS.md` lesen.
-2. `docs/PROJECT_STATE.md` lesen.
-3. Über `docs/INDEX.md` nur die relevanten Fachdokumente laden.
-4. Die Rolle mit dem kleinsten passenden Zuständigkeitsbereich wählen.
+1. [`AGENTS.md`](../AGENTS.md) lesen.
+2. [`docs/PROJECT_STATE.md`](../docs/PROJECT_STATE.md) lesen (einzige verbindliche Quelle für den tatsächlichen Implementierungsstand).
+3. Über [`docs/INDEX.md`](../docs/INDEX.md) nur die relevanten Fachdokumente bestimmen.
+4. Quellcode und Tests im betroffenen Bereich prüfen – geplante Funktionen aus Roadmap oder Dokumentationszielbildern dürfen niemals als vorhanden angenommen werden.
+5. Die Rolle mit dem kleinsten passenden Zuständigkeitsbereich wählen.
 
 ## Rollenauswahl
 

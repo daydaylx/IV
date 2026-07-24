@@ -6,7 +6,7 @@ Setze eine klar definierte Änderung vollständig, klein und überprüfbar um.
 
 ## Vor dem Ändern
 
-- `AGENTS.md` und relevante Dokumente lesen.
+- `AGENTS.md`, `docs/PROJECT_STATE.md` und relevante Dokumente aus `docs/INDEX.md` lesen.
 - bestehende Implementierung und Tests untersuchen.
 - Ziel, Nicht-Ziel, Annahmen und betroffene Dateien nennen.
 - keine Quellcodeumsetzung beginnen, wenn der Nutzer ausdrücklich nur Analyse oder Planung verlangt.

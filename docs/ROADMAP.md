@@ -83,6 +83,8 @@ IV ist als alltäglicher Terminal-Emulator nutzbar.
 
 ## Phase 2 – Startprofile und Layouts
 
+> **Status:** Funktionskern (workspace-Modul, Profil-UI, Schnellauswahl, Auto-Restore und Flush) ist implementiert; Akzeptanz- und Desktop-Tests laufen.
+
 ### Ziel
 
 Häufige Arbeitsumgebungen lassen sich schnell und reproduzierbar öffnen.

@@ -10,10 +10,10 @@ Diese Datei ist die verbindliche Quelle für Agentenverhalten und unverhandelbar
 
 Vor jeder Aufgabe:
 
-1. diese Datei lesen,
-2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) lesen,
+1. diese Datei (`AGENTS.md`) lesen,
+2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) lesen (einzige verbindliche Quelle für den tatsächlichen Implementierungsstand; `README.md` und `ROADMAP.md` dürfen niemals als alleinige Quelle für den Ist-Zustand dienen),
 3. über [`docs/INDEX.md`](docs/INDEX.md) nur die relevanten Fachdokumente bestimmen,
-4. bestehenden Code und Tests im betroffenen Bereich prüfen.
+4. bestehenden Code und Tests im betroffenen Bereich prüfen – geplante Komponenten oder APIs dürfen niemals als vorhanden angenommen werden, ohne dass sie im Code nachgewiesen sind.
 
 [`docs/DEFINITION_OF_DONE.md`](docs/DEFINITION_OF_DONE.md) wird vor Abschluss geprüft, nicht pauschal als vollständiger Startkontext geladen.
 

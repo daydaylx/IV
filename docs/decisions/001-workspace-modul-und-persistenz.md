@@ -1,6 +1,6 @@
 # ADR-001: Workspace-Modul und Persistenz für Phase 2
 
-- Status: akzeptiert; Domänen-/Storage-Grundlage umgesetzt, Produktanbindung offen
+- Status: akzeptiert; Domänen-, Storage- und Produktanbindung (UI-Dialog, Shortcuts, Auto-Restore & Flush) umgesetzt
 - Datum: 2026-07-24
 - Verantwortlich: IV-Implementierung Phase 2
 

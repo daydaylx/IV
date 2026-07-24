@@ -4,7 +4,7 @@ IV ist ein nativer, leichtgewichtiger Terminal-Emulator für Linux mit moderner,
 
 Das Terminal bleibt jederzeit der Mittelpunkt. KI, Startprofile und Layouts sind ergänzende Funktionen und dürfen den normalen Terminalbetrieb weder verlangsamen noch komplizierter machen.
 
-> **Aktueller Stand:** Der Funktionskern von Phase 1 ist implementiert: lokale Shells, Tabs, verschachtelte Splits, Suche, sichere HTTP(S)-Links sowie Schrift- und Theme-Einstellungen. Die Phase bleibt bis zu den noch offenen Wayland- und Langzeittests in Stabilisierung. Details: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
+> **Aktueller Stand:** Der Funktionskern von Phase 2 (Startprofile, Layout-Persistenz und Auto-Restore) ist implementiert. Die UI-Integration und Akzeptanztests laufen. Details zum aktuellen Umsetzungsstand: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
 ## Projektziel
 
@@ -191,10 +191,13 @@ Die vollständigen Ziele und Abschlusskriterien stehen in [`docs/ROADMAP.md`](do
 - Literalsuche im aktiven Terminal-Scrollback
 - ausschließlich validierte HTTP(S)-Links per `Ctrl+Click`
 - asynchron geladene TOML-Einstellungen für Schrift und Farbschema
+- versionierte Startprofile und debouncte Layout-Persistenz (`workspace/`)
+- UI-Profilanlegedialog, `Ctrl+Shift+N` und Schnellauswahl per `Alt+1`…`Alt+9`
+- automatische Layout-Wiederherstellung beim Start und synchroner Flush beim Schließen
 - sichtbare Start-, Clipboard- und Prozessfehler
 - nichtblockierender, abgestufter Prozessabschluss
 
-Vollbild, Profile, Layoutpersistenz, KI, ein alternatives Backend und zusätzliche Plattformen bleiben ausdrücklich offen oder späteren Phasen vorbehalten.
+Vollbild, KI-Assistent, ein alternatives Backend und zusätzliche Plattformen bleiben ausdrücklich offen oder späteren Phasen vorbehalten.
 
 ## Dokumentation
 

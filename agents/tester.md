@@ -4,6 +4,10 @@
 
 Entwirf reproduzierbare Prüfungen für Terminal-, UI-, Prozess- und KI-Verhalten. Priorisiere reale Fehlerfälle vor oberflächlicher Abdeckung.
 
+## Vor den Tests
+
+- `AGENTS.md`, `docs/PROJECT_STATE.md` und `docs/TEST_STRATEGY.md` lesen.
+
 ## Testbereiche
 
 ### Terminal und Prozess

@@ -6,7 +6,7 @@ Dieser Ablauf verhindert große, unprüfbare Änderungen und schützt das Projek
 
 ## 1. Einordnung
 
-Vor jeder Änderung beantworten:
+Vor jeder Änderung `AGENTS.md` und `docs/PROJECT_STATE.md` lesen und beantworten:
 
 - Welches konkrete Terminalproblem wird gelöst?
 - Gehört es zur aktuellen Phase?

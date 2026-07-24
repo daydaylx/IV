@@ -61,9 +61,9 @@ Eine Laufzeitbeobachtung der Datei und eine Einstellungsoberfläche sind nicht i
 
 ## Profile und Layouts
 
-Das `workspace`-Modul enthält bereits versionierte, validierte Datenmodelle und asynchronen Storage für `$XDG_CONFIG_HOME/iv/workspace/profiles.toml` und `layout.toml`. Unbekannte Schema-Versionen oder beschädigte Dateien werden beim Speichern nicht überschrieben.
+Das `workspace`-Modul enthält versionierte, validierte Datenmodelle und asynchronen Storage für `$XDG_CONFIG_HOME/iv/workspace/profiles.toml` und `layout.toml`. Unbekannte Schema-Versionen oder beschädigte Dateien werden beim Speichern nicht überschrieben.
 
-Diese Grundlage ist noch nicht an die Anwendungsstartsequenz oder eine Profil-UI angebunden. Profile und Layouts sind daher noch kein nutzbares Produktverhalten.
+Diese Grundlage ist beim Start über `app::startup::bootstrap_workspace` angebunden. Profile können über den UI-Dialog (`ui::profile.rs`) angelegt sowie per `Alt+1`…`Alt+9` oder HeaderBar-Menü ausgewählt werden. Layout-Snapshots werden automatisch debounced gespeichert und beim Fensterabschluss geflusht.
 
 Startprofile werden getrennt von globalen Einstellungen modelliert und enthalten nur:
 

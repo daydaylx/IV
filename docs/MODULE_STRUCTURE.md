@@ -9,15 +9,18 @@ Die Modulstruktur hält UI, Zustand, Terminaltechnik, Persistenz und KI klar get
 ```text
 src/
 ├── main.rs
+├── app/
+│   ├── mod.rs
+│   └── startup.rs
 ├── pane/
+│   └── mod.rs
+├── settings/
 │   └── mod.rs
 ├── tab/
 │   └── mod.rs
 ├── terminal/
 │   ├── mod.rs
 │   └── vte_backend.rs
-├── settings/
-│   └── mod.rs
 ├── workspace/
 │   ├── mod.rs
 │   ├── error.rs
@@ -25,17 +28,22 @@ src/
 │   ├── profile.rs
 │   ├── start_config.rs
 │   └── storage.rs
-├── ui/
-│   ├── mod.rs
-│   ├── actions.rs
-│   ├── links.rs
-│   ├── search.rs
-│   └── window.rs
+└── ui/
+    ├── mod.rs
+    ├── actions.rs
+    ├── links.rs
+    ├── pane_view.rs
+    ├── profile.rs
+    ├── search.rs
+    ├── tabs_view.rs
+    ├── terminal_events.rs
+    ├── theme.rs
+    └── window.rs
 ```
 
-`pane` und `tab` bilden den GTK-/VTE-freien Domänenzustand. `terminal` kapselt VTE und den Prozesslebenszyklus. `settings` lädt und validiert das aktuelle TOML-Schema. `workspace` enthält die bereits testbare, aber noch nicht an UI und Startsequenz angebundene Phase-2-Grundlage für Profile und Layoutdaten. `ui` trennt Aktionen, Linkbehandlung, Suche und Fenster-/Session-Lifecycle.
+`pane` und `tab` bilden den GTK-/VTE-freien Domänenzustand. `terminal` kapselt VTE und den Prozesslebenszyklus. `settings` lädt und validiert das allgemeine TOML-Schema für Schrift und Farbschema. `workspace` enthält die an UI (`ui/profile.rs`) und Startsequenz (`app/startup.rs`) angebundene Phase-2-Grundlage für Profile und Layoutdaten. `ui` trennt Aktionen, Linkbehandlung, Suche, Profil-Dialoge, Tab-/Pane-Views, Theme-Anwendung und Fenster-/Session-Lifecycle.
 
-Die weiter unten beschriebenen separaten Module `domain`, `config`, `profiles`, `ai` und `infrastructure` sind eine Wachstumsrichtung, keine bereits implementierte Verzeichnisstruktur. `app` existiert bereits als dünne Startkoordination; `workspace` bündelt Profile, Layoutmodell und Storage vorerst bewusst. Neue Verzeichnisse entstehen erst mit einem konkreten zweiten Verantwortungsbereich.
+Die weiter unten beschriebenen separaten Module `domain`, `config`, `profiles`, `ai` und `infrastructure` sind eine Wachstumsrichtung, keine bereits implementierte Verzeichnisstruktur. `app` koordiniert Anwendungsstart und Workspace-Bootstrap; `workspace` bündelt Profile, Layoutmodell und Storage vorerst bewusst. Neue Verzeichnisse entstehen erst mit einem konkreten zweiten Verantwortungsbereich.
 
 ## Künftige `app`-Schicht
 

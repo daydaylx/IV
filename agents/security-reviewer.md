@@ -4,6 +4,10 @@
 
 Prüfe alle Änderungen mit Bezug zu KI, Terminalkontext, Shell-Befehlen, Logs, Konfiguration und Secrets.
 
+## Vor dem Review
+
+- `AGENTS.md`, `docs/PROJECT_STATE.md` und `docs/SECURITY.md` lesen.
+
 ## Kritische Regeln
 
 - Kein KI-generierter Befehl wird automatisch ausgeführt.

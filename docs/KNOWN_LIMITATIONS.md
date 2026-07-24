@@ -33,7 +33,6 @@ Aktuelle Details: [`PROJECT_STATE.md`](PROJECT_STATE.md).
 - Das aktuelle Arbeitsverzeichnis kann technisch unbekannt sein.
 - Ist das aktuelle Verzeichnis unbekannt oder ungültig, muss auf einen bestätigten Startpfad zurückgefallen werden.
 - Vollständige Wiederaufnahme einer laufenden Shell nach einem Anwendungsneustart ist nicht vorgesehen.
-- Die Daten- und Storage-Grundlage für Startprofile und Layoutpersistenz ist vorhanden, aber noch nicht an Startsequenz, Terminalstart oder UI angebunden.
 
 ## KI-Unterstützung
 

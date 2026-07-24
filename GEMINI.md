@@ -5,7 +5,7 @@ Nutze [`AGENTS.md`](AGENTS.md) als einzige verbindliche Quelle für Agentenregel
 Vor jeder Aufgabe:
 
 1. [`AGENTS.md`](AGENTS.md) lesen.
-2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) lesen.
+2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) lesen (einzige Quelle für den tatsächlichen Implementierungsstand).
 3. Über [`docs/INDEX.md`](docs/INDEX.md) nur die relevanten Fachdokumente bestimmen.
 4. Vor Abschluss die einschlägigen Punkte aus [`docs/DEFINITION_OF_DONE.md`](docs/DEFINITION_OF_DONE.md) prüfen.
 

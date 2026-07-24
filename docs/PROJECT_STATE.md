@@ -9,7 +9,7 @@
 - **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs, verschachtelten Pane-Splits, Suche, Links, Einstellungen, Startprofilen und Layout-Persistenz
 - **Primäre Plattform:** Linux mit Wayland
 - **Terminal-Backend im MVP:** VTE
-- **Letzte Dokumentprüfung:** 25. Juli 2026
+- **Letzte Dokumentprüfung:** 24. Juli 2026
 
 ## Implementiert
 
