@@ -145,6 +145,17 @@ impl VteBackend {
         self.terminal.grab_focus();
     }
 
+    pub(super) fn connect_title_changed<F>(&self, handler: F)
+    where
+        F: Fn(&str) + 'static,
+    {
+        self.terminal.connect_window_title_changed(move |term| {
+            if let Some(title) = term.window_title() {
+                handler(title.as_str());
+            }
+        });
+    }
+
     pub(super) fn request_close<F>(&self, on_ready: F) -> bool
     where
         F: FnOnce() + 'static,

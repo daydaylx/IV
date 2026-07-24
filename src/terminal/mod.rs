@@ -50,6 +50,13 @@ impl Terminal {
         self.backend.focus();
     }
 
+    pub(crate) fn connect_title_changed<F>(&self, handler: F)
+    where
+        F: Fn(&str) + 'static,
+    {
+        self.backend.connect_title_changed(handler);
+    }
+
     pub(crate) fn request_close<F>(&self, on_ready: F) -> bool
     where
         F: FnOnce() + 'static,
