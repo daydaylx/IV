@@ -4,12 +4,12 @@
 
 ## Status
 
-- **Projektstatus:** Phase-1-Funktionskern implementiert; Stabilisierung und Akzeptanztests laufen
-- **Aktuelle Phase:** Phase 1 – Terminal-MVP
-- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs, verschachtelten Pane-Splits, Suche, Links und Einstellungen
+- **Projektstatus:** Phase-2-Funktionskern (Startprofile und Auto-Restore) implementiert; UI-Integration und Akzeptanztests laufen
+- **Aktuelle Phase:** Phase 2 – Startprofile und Layouts
+- **Implementierungsstand:** lauffähiger Rust-/GTK4-/libadwaita-/VTE-Anwendungskern mit Tabs, verschachtelten Pane-Splits, Suche, Links, Einstellungen, Startprofilen und Layout-Persistenz
 - **Primäre Plattform:** Linux mit Wayland
 - **Terminal-Backend im MVP:** VTE
-- **Letzte Dokumentprüfung:** 24. Juli 2026
+- **Letzte Dokumentprüfung:** 25. Juli 2026
 
 ## Implementiert
 
@@ -37,7 +37,7 @@
 - nichtblockierender Fensterabschluss: alle Tabs erhalten `SIGHUP`, nach 1,5 s `SIGKILL`, nach 2,5 s endgültige UI-Freigabe
 - mehrere gleichzeitige Schließanforderungen werden bis zum tatsächlichen Prozessende gemeinsam abgeschlossen
 - VTE-Typen ausschließlich im privaten Adapter `terminal/vte_backend.rs`
-- Pane-Domänenschicht (`PaneTree`, `PaneNode`, `PaneId`, `Direction`) ohne GTK-/VTE-Abhängigkeiten
+- Pane-Domänenschicht in `pane/` (`tree.rs`, `node.rs`, `navigation.rs`) ohne GTK-/VTE-Abhängigkeiten
 - Pane-Tree mit Terminal-Blättern und stabil identifizierten Split-Knoten (Horizontal/Vertikal)
 - horizontaler Split: `Ctrl+Shift+Right`
 - vertikaler Split: `Ctrl+Shift+Down`
@@ -59,9 +59,18 @@
 - Farbschema (`appearance.theme`: `system`/`light`/`dark`) via `adw::StyleManager`
 - feldweise Validierung mit sichtbaren, typisierten Warnungen und sicheren Standardwerten
 - Schriftzoom: `Ctrl++` / `Ctrl+-` / `Ctrl+0` via VTE `font_scale` (0.5–4.0)
-- getrennte UI-Module für Aktionen, Links, Suche und Fenster-/Session-Lifecycle
+- getrennte UI-Module in `ui/` für Aktionen, Links, Suche, Profile, Fenster-Lifecycle, Pane-Widgets, Tabs und Terminal-Events
 - testbare Phase-2-Grundlage in `workspace/`: versionierte Profile und Layout-Snapshots, Schema-/Pfadvalidierung sowie asynchrones, ersetzendes GIO-Schreiben
 - Workspace-Dateien mit unbekannter Version oder beschädigtem TOML werden nicht überschrieben
+- eigenes Modul `src/workspace/` mit `WorkspaceStorage` (Async-I/O via `gio::File`), `StartProfile`, `StartConfig` inkl. `validate_path` (Schema-only, keine Existenzprüfung beim Anlegen) und `LayoutSnapshot` mit `active_profile_id` getrennt vom Tab-Baum
+- `LayoutDebouncer` für 1 s Debounce auf Strukturänderungen; synchroner Flush beim Schließen
+- `LaunchConfig` parametrisiert (`program`, `args`, `working_directory`); `LaunchConfig::for_pane(&StartConfig)` und `Terminal::start_with(&LaunchConfig)` ergänzt
+- `TabInfo` um `custom_title: Option<String>` und `start_config: Option<StartConfig>` erweitert; `TabCollection::from_tabs` für Snapshot-Wiederherstellung
+- `PaneTree::from_root` validiert und rekonstruiert `next_id` / `next_split_id` aus gespeicherten IDs
+- Anlege-Dialog (`gtk::Window`-basiert) für neue Profile mit Feldern Name, Verzeichnis, optionale Shell, optionaler Startbefehl und Live-Validierung
+- Tastenkürzel `Alt+1`…`Alt+9` für alphabetische Schnellauswahl der ersten neun Profile, `Ctrl+Shift+N` öffnet den Anlege-Dialog
+- `app::startup::bootstrap_workspace` lädt Profile und Layout asynchron beim Start; `save_layout_now` flusht synchron vor Shell-Beendigung
+- `connect_close_request` ruft `save_layout_now` vor `terminal.request_close`
 
 ## Geprüft
 
@@ -95,19 +104,22 @@ Xvfb meldete lediglich die erwarteten libEGL-Hinweise wegen fehlender DRI3-Hardw
 - manuelle Desktop-Prüfung der URL-Links (Ctrl+Click)
 - manuelle Desktop-Prüfung der Suchleiste
 - manuelle Desktop-Prüfung der Split-Funktionen
+- manuelle Desktop-Prüfung der Profil-UI (Anlegen, Auswählen, Auto-Restore)
+- Sicherheitsreview der Phase-2-Änderungen gemäß `agents/security-reviewer.md`
+- Sicherheitsreview der Profil-Anlage und der TOML-Deserialisierung
+- Konfliktprüfung der `Alt+1`…`Alt+9`-Tastenkürzel in bash, vim, tmux, htop
 - manuelle Langzeitprüfung mit Pi Agent sowie Codex CLI oder Claude Code
 - Vollbild
 - manuelle Wiederholung der Phase-0- und Phase-1-Desktopprüfungen unter Wayland
 - ein automatisierter echter VTE-/PTY-Integrationstest
 - reproduzierbare Prüfung des seltenen `SIGKILL`-Timeoutpfads
-- Anbindung der Workspace-Grundlage an Startsequenz, Terminalstart und Profil-UI
 - KI-Provider, Streaming oder Kontextfilter
 - reproduzierbare Performance-Messungen
 - Paketierung oder Releaseprozess
 
 ## Nächster technischer Schritt
 
-Die vollständige Phase-1-Desktop- und Langzeittestmatrix unter Wayland ausführen und dokumentieren; erst danach die Phase-2-Grundlage an das Produkt anbinden.
+Manuelle Desktop-Prüfung der Phase-2-Funktionen (Profil-UI, Tastenkürzel, Auto-Restore, Sicherheitsreview) und vollständige Phase-1-Desktop- und Langzeittestmatrix unter Wayland; danach Phase 3 (KI-Assistent).
 
 ## Regel zur Aktualisierung
 

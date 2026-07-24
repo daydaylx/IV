@@ -1,18 +1,22 @@
 //! Window composition and tab/pane session lifecycle.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::pane::{Direction, Orientation, PaneId, PaneNode, PaneTree};
-use crate::settings::{AppSettings, SettingsWarning, Theme};
+use crate::pane::{Direction, Orientation, PaneId};
+use crate::settings::SettingsWarning;
 use crate::tab::{TabCollection, TabId};
-use crate::terminal::{CloseRequest, StartupWarning, Terminal, TerminalEvent};
+use crate::terminal::{CloseRequest, Terminal};
 
-use super::{actions, links, profile, search};
+pub(crate) use super::tabs_view::update_tab_collection;
+use super::tabs_view::{self, TabEntry};
+use super::terminal_events;
+use super::theme;
+use super::{actions, profile, search};
 
 const DEFAULT_WIDTH: i32 = 900;
 const DEFAULT_HEIGHT: i32 = 600;
@@ -20,31 +24,20 @@ const MINIMUM_WIDTH: i32 = 480;
 const MINIMUM_HEIGHT: i32 = 320;
 
 // ---------------------------------------------------------------------------
-// Per-tab data
-// ---------------------------------------------------------------------------
-
-struct TabEntry {
-    /// Terminal for each pane, keyed by PaneId.
-    terminals: HashMap<PaneId, Terminal>,
-    label: gtk::Label,
-    page: gtk::Box,
-}
-
-// ---------------------------------------------------------------------------
 // Shared UI state – all callbacks hold an Rc<UiState>
 // ---------------------------------------------------------------------------
 
 pub(crate) struct UiState {
     pub(crate) tab_collection: RefCell<TabCollection>,
-    tab_entries: RefCell<HashMap<TabId, TabEntry>>,
-    notebook: gtk::Notebook,
+    pub(crate) tab_entries: RefCell<HashMap<TabId, TabEntry>>,
+    pub(crate) notebook: gtk::Notebook,
     pub(super) search_bar: gtk::SearchBar,
     pub(super) search_entry: gtk::SearchEntry,
     pub(super) search_target: RefCell<Option<(TabId, PaneId)>>,
-    status_label: gtk::Label,
-    status_revealer: gtk::Revealer,
+    pub(crate) status_label: gtk::Label,
+    pub(crate) status_revealer: gtk::Revealer,
     pub(super) window: adw::ApplicationWindow,
-    font_desc: RefCell<gtk::pango::FontDescription>,
+    pub(crate) font_desc: RefCell<gtk::pango::FontDescription>,
     pub(crate) profiles: RefCell<Vec<crate::workspace::StartProfile>>,
     pub(crate) active_profile_id: RefCell<Option<crate::workspace::ProfileId>>,
     pub(crate) workspace_storage: RefCell<Option<crate::workspace::WorkspaceStorage>>,
@@ -57,11 +50,11 @@ pub(crate) struct UiState {
 
 pub(crate) fn build_main_window(application: &adw::Application) {
     // -- CSS for active pane indicator
-    load_pane_css();
+    theme::load_pane_css();
 
     // -- safe defaults; the configuration file is loaded asynchronously
-    let settings = AppSettings::default();
-    let font_desc = make_font_desc(&settings);
+    let settings = crate::settings::AppSettings::default();
+    let font_desc = theme::make_font_desc(&settings);
 
     // -- domain model
     let tab_collection = TabCollection::new();
@@ -148,398 +141,25 @@ pub(crate) fn build_main_window(application: &adw::Application) {
     });
 
     // -- wire everything up
-    let initial_terminals = rebuild_tab_page(&state, first_tab_id);
+    let initial_terminals = tabs_view::rebuild_tab_page(&state, first_tab_id);
     actions::install_tab_actions(application, &state);
     actions::install_pane_actions(application, &state);
     actions::install_clipboard_actions(application, &state);
     search::install_search_actions(application, &state);
     actions::install_font_actions(application, &state);
     profile::install_profile_actions(application, &state);
-    connect_notebook_signals(&state);
+    tabs_view::connect_notebook_signals(&state);
     connect_close_request(&state);
     crate::app::startup::bootstrap_workspace(Rc::clone(&state));
 
     window.present();
 
     for terminal in initial_terminals {
-        start_terminal(&state, &terminal);
+        terminal_events::start_terminal(&state, &terminal);
     }
 
     focus_active_tab(&state);
-    load_settings(&state);
-}
-
-// ---------------------------------------------------------------------------
-// CSS for active pane
-// ---------------------------------------------------------------------------
-
-fn load_pane_css() {
-    let provider = gtk::CssProvider::new();
-    provider.load_from_data(".active-pane { border: 2px solid @accent_color; }");
-
-    if let Some(display) = gtk::gdk::Display::default() {
-        gtk::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    }
-}
-
-/// Build a `pango::FontDescription` from settings.
-fn make_font_desc(settings: &AppSettings) -> gtk::pango::FontDescription {
-    let mut desc = gtk::pango::FontDescription::from_string(&settings.font.family);
-    desc.set_size((settings.font.size * gtk::pango::SCALE as f64) as i32);
-    desc
-}
-
-/// Apply the color scheme preference via libadwaita's style manager.
-fn apply_theme(settings: &AppSettings) {
-    let manager = adw::StyleManager::default();
-    let color_scheme = match settings.theme {
-        Theme::System => adw::ColorScheme::Default,
-        Theme::Light => adw::ColorScheme::ForceLight,
-        Theme::Dark => adw::ColorScheme::ForceDark,
-    };
-    manager.set_color_scheme(color_scheme);
-}
-
-fn load_settings(state: &Rc<UiState>) {
-    let state = Rc::downgrade(state);
-    glib::MainContext::default().spawn_local(async move {
-        let outcome = AppSettings::load_async().await;
-        let Some(state) = state.upgrade() else {
-            return;
-        };
-
-        apply_theme(&outcome.settings);
-        let font_desc = make_font_desc(&outcome.settings);
-        *state.font_desc.borrow_mut() = font_desc.clone();
-        for terminal in state
-            .tab_entries
-            .borrow()
-            .values()
-            .flat_map(|entry| entry.terminals.values())
-        {
-            terminal.set_font(&font_desc);
-        }
-        show_settings_warnings(&state, &outcome.warnings);
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Widget tree builder
-// ---------------------------------------------------------------------------
-
-/// Recursively builds a GTK widget tree from a [`PaneNode`].
-/// Populates `terminals` with new Terminal instances for each pane leaf.
-///
-/// The active pane (matching `tree.active_id()`) receives the `active-pane`
-/// CSS class; panes whose terminals are already in `existing` reuse them.
-fn build_pane_widget(
-    tree: &PaneTree,
-    existing: &mut HashMap<PaneId, Terminal>,
-    font_desc: &gtk::pango::FontDescription,
-    state: Weak<UiState>,
-    tab_id: TabId,
-    new_terminals: &mut Vec<(PaneId, Terminal)>,
-) -> gtk::Widget {
-    let mut context = PaneBuildContext {
-        active_id: tree.active_id(),
-        terminals: existing,
-        font_desc,
-        state,
-        tab_id,
-        new_terminals,
-    };
-    build_pane_widget_rec(tree.root(), &mut context)
-}
-
-struct PaneBuildContext<'a> {
-    active_id: PaneId,
-    terminals: &'a mut HashMap<PaneId, Terminal>,
-    font_desc: &'a gtk::pango::FontDescription,
-    state: Weak<UiState>,
-    tab_id: TabId,
-    new_terminals: &'a mut Vec<(PaneId, Terminal)>,
-}
-
-fn build_pane_widget_rec(node: &PaneNode, context: &mut PaneBuildContext<'_>) -> gtk::Widget {
-    match node {
-        PaneNode::Terminal { id, .. } => {
-            let existing = context.terminals.remove(id);
-            let is_new = existing.is_none();
-            let terminal = existing.unwrap_or_else(Terminal::new);
-            let widget = terminal.widget();
-            if *id == context.active_id {
-                widget.add_css_class("active-pane");
-            } else {
-                widget.remove_css_class("active-pane");
-            }
-            if is_new {
-                terminal.set_font(context.font_desc);
-                links::attach_url_click_handler(&widget, terminal.clone(), context.state.clone());
-                attach_pane_focus_handler(&widget, context.state.clone(), context.tab_id, *id);
-                context.new_terminals.push((*id, terminal.clone()));
-            }
-            context.terminals.insert(*id, terminal);
-            widget
-        }
-        PaneNode::Split {
-            id,
-            orientation,
-            ratio,
-            first,
-            second,
-        } => {
-            let paned = match orientation {
-                Orientation::Horizontal => gtk::Paned::new(gtk::Orientation::Horizontal),
-                Orientation::Vertical => gtk::Paned::new(gtk::Orientation::Vertical),
-            };
-            paned.set_wide_handle(true);
-            paned.set_shrink_start_child(false);
-            paned.set_shrink_end_child(false);
-
-            let ratio_state = Rc::new(Cell::new(*ratio));
-            let ratio_for_resize = Rc::clone(&ratio_state);
-            paned.connect_notify_local(Some("max-position"), move |paned, _| {
-                let max = paned.max_position();
-                if max > 0 {
-                    paned.set_position((ratio_for_resize.get() * f64::from(max)).round() as i32);
-                }
-            });
-
-            let ratio_for_position = Rc::clone(&ratio_state);
-            let state_for_position = context.state.clone();
-            let tab_id = context.tab_id;
-            let split_id = *id;
-            paned.connect_notify_local(Some("position"), move |paned, _| {
-                let max = paned.max_position();
-                if max <= 0 {
-                    return;
-                }
-                let ratio = (f64::from(paned.position()) / f64::from(max))
-                    .clamp(PaneTree::MIN_SPLIT_RATIO, PaneTree::MAX_SPLIT_RATIO);
-                ratio_for_position.set(ratio);
-                if let Some(state) = state_for_position.upgrade()
-                    && let Some(tree) = state
-                        .tab_collection
-                        .borrow_mut()
-                        .pane_tree_for_tab_mut(tab_id)
-                {
-                    tree.set_split_ratio(split_id, ratio);
-                }
-            });
-
-            let first_widget = build_pane_widget_rec(first, context);
-            let second_widget = build_pane_widget_rec(second, context);
-
-            paned.set_start_child(Some(&first_widget));
-            paned.set_end_child(Some(&second_widget));
-
-            paned.upcast()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Rebuild a tab's page after structural changes
-// ---------------------------------------------------------------------------
-
-/// Rebuilds one stable tab page and returns only newly created terminals.
-fn rebuild_tab_page(state: &Rc<UiState>, tab_id: TabId) -> Vec<Terminal> {
-    let pane_tree = {
-        let tabs = state.tab_collection.borrow();
-        let Some(tree) = tabs.pane_tree_for_tab(tab_id) else {
-            return Vec::new();
-        };
-        tree.clone()
-    };
-
-    let page = {
-        let entries = state.tab_entries.borrow();
-        let Some(entry) = entries.get(&tab_id) else {
-            return Vec::new();
-        };
-        detach_terminal_widgets(&entry.terminals);
-        entry.page.clone()
-    };
-
-    // Removing and dropping the old root unparents all retained VTE widgets
-    // before the new split hierarchy is built.
-    while let Some(child) = page.first_child() {
-        page.remove(&child);
-    }
-
-    let old_terminals = {
-        let mut entries = state.tab_entries.borrow_mut();
-        entries
-            .get_mut(&tab_id)
-            .map(|entry| std::mem::take(&mut entry.terminals))
-    };
-    let Some(mut terminals) = old_terminals else {
-        return Vec::new();
-    };
-
-    let valid_ids = pane_tree.pane_ids();
-    terminals.retain(|id, _| valid_ids.contains(id));
-
-    let font_desc = state.font_desc.borrow().clone();
-    let mut new_terminals = Vec::new();
-    let root = build_pane_widget(
-        &pane_tree,
-        &mut terminals,
-        &font_desc,
-        Rc::downgrade(state),
-        tab_id,
-        &mut new_terminals,
-    );
-    page.append(&root);
-
-    if let Some(entry) = state.tab_entries.borrow_mut().get_mut(&tab_id) {
-        entry.terminals = terminals;
-    }
-
-    for (pane_id, terminal) in &new_terminals {
-        connect_pane_events(Rc::downgrade(state), tab_id, *pane_id, terminal);
-        connect_pane_title(Rc::downgrade(state), tab_id, *pane_id, terminal);
-    }
-
-    new_terminals
-        .into_iter()
-        .map(|(_, terminal)| terminal)
-        .collect()
-}
-
-fn detach_terminal_widgets(terminals: &HashMap<PaneId, Terminal>) {
-    for terminal in terminals.values() {
-        let widget = terminal.widget();
-        let Some(parent) = widget.parent() else {
-            continue;
-        };
-
-        if let Ok(paned) = parent.clone().downcast::<gtk::Paned>() {
-            if paned.start_child().as_ref() == Some(&widget) {
-                paned.set_start_child(gtk::Widget::NONE);
-            } else if paned.end_child().as_ref() == Some(&widget) {
-                paned.set_end_child(gtk::Widget::NONE);
-            }
-        } else if let Ok(container) = parent.downcast::<gtk::Box>() {
-            container.remove(&widget);
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Connecting terminal events for a single pane
-// ---------------------------------------------------------------------------
-
-fn connect_pane_events(state: Weak<UiState>, tab_id: TabId, pane_id: PaneId, terminal: &Terminal) {
-    terminal.set_event_handler(Rc::new(move |event| match event {
-        TerminalEvent::Started => {}
-        TerminalEvent::SpawnFailed(error) => {
-            if let Some(state) = state.upgrade() {
-                show_status(&state, error.user_message());
-            }
-        }
-        TerminalEvent::Exited(exit) if exit.successful() => {
-            if let Some(state) = state.upgrade() {
-                handle_pane_exited_success(&state, tab_id, pane_id);
-            }
-        }
-        TerminalEvent::Exited(exit) => {
-            if let Some(state) = state.upgrade() {
-                handle_pane_exited_error(&state, tab_id, pane_id, &exit.user_message());
-            }
-        }
-    }));
-}
-
-fn connect_pane_title(state: Weak<UiState>, tab_id: TabId, pane_id: PaneId, terminal: &Terminal) {
-    terminal.connect_title_changed(move |title| {
-        let Some(state) = state.upgrade() else {
-            return;
-        };
-        if let Some(tree) = state
-            .tab_collection
-            .borrow_mut()
-            .pane_tree_for_tab_mut(tab_id)
-        {
-            tree.set_title(pane_id, title.to_owned());
-        }
-
-        // Update the tab label if this is the active pane.
-        if let Some(entry) = state.tab_entries.borrow().get(&tab_id) {
-            let is_active = state
-                .tab_collection
-                .borrow()
-                .pane_tree_for_tab(tab_id)
-                .map(|t| t.active_id() == pane_id)
-                .unwrap_or(false);
-            if is_active {
-                entry.label.set_label(title);
-            }
-        }
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Pane event handlers
-// ---------------------------------------------------------------------------
-
-fn handle_pane_exited_success(state: &Rc<UiState>, tab_id: TabId, pane_id: PaneId) {
-    let should_close_tab = {
-        let tabs = state.tab_collection.borrow();
-        let tree = match tabs.pane_tree_for_tab(tab_id) {
-            Some(t) => t,
-            None => return,
-        };
-        // If this is the only pane in the tab, close the tab.
-        tree.is_single()
-    };
-
-    if should_close_tab {
-        let was_last = state.tab_collection.borrow().len() <= 1;
-        if was_last {
-            state.window.close();
-        } else {
-            remove_tab(state, tab_id);
-        }
-    } else {
-        let result = {
-            let mut tabs = state.tab_collection.borrow_mut();
-            if let Some(tree) = tabs.pane_tree_for_tab_mut(tab_id) {
-                tree.close(pane_id)
-            } else {
-                None
-            }
-        };
-        if result.is_some() {
-            rebuild_tab_page(state, tab_id);
-        }
-    }
-}
-
-fn handle_pane_exited_error(state: &Rc<UiState>, tab_id: TabId, pane_id: PaneId, message: &str) {
-    // Show error if this is the active pane of the active tab.
-    let is_active_tab = state.tab_collection.borrow().active_id() == tab_id;
-    let is_active_pane = state
-        .tab_collection
-        .borrow()
-        .pane_tree_for_tab(tab_id)
-        .map(|t| t.active_id() == pane_id)
-        .unwrap_or(false);
-
-    if is_active_tab && is_active_pane {
-        show_status(state, message);
-    }
-
-    // Update the tab label if this was the active pane.
-    if is_active_pane && let Some(entry) = state.tab_entries.borrow().get(&tab_id) {
-        entry
-            .label
-            .set_label(&format!("[beendet] {}", entry.label.label()));
-    }
+    theme::load_settings(&state);
 }
 
 // ---------------------------------------------------------------------------
@@ -573,8 +193,8 @@ pub(super) fn create_new_tab(state: &Rc<UiState>) {
         },
     );
 
-    for terminal in rebuild_tab_page(state, tab_id) {
-        start_terminal(state, &terminal);
+    for terminal in tabs_view::rebuild_tab_page(state, tab_id) {
+        terminal_events::start_terminal(state, &terminal);
     }
     focus_active_tab(state);
 }
@@ -597,7 +217,7 @@ pub(super) fn close_active_tab(state: &Rc<UiState>) {
         .unwrap_or_default();
 
     if terminals.is_empty() {
-        remove_tab(state, active_id);
+        tabs_view::remove_tab(state, active_id);
         return;
     }
 
@@ -614,7 +234,7 @@ pub(super) fn close_active_tab(state: &Rc<UiState>) {
             if *remaining == 0
                 && let Some(state) = state_weak.upgrade()
             {
-                remove_tab(&state, active_id);
+                tabs_view::remove_tab(&state, active_id);
             }
         });
 
@@ -624,18 +244,9 @@ pub(super) fn close_active_tab(state: &Rc<UiState>) {
     }
 
     if *pending.borrow() == 0 {
-        remove_tab(state, active_id);
+        tabs_view::remove_tab(state, active_id);
     } else {
         show_status(state, "Die Shells werden beendet …");
-    }
-}
-
-fn remove_tab(state: &Rc<UiState>, tab_id: TabId) {
-    let index = state.tab_collection.borrow().find_index(tab_id);
-    state.tab_collection.borrow_mut().remove(tab_id);
-    state.tab_entries.borrow_mut().remove(&tab_id);
-    if let Some(index) = index {
-        state.notebook.remove_page(Some(index as u32));
     }
 }
 
@@ -652,8 +263,8 @@ pub(super) fn split_pane(state: &Rc<UiState>, orientation: Orientation) {
         tabs.split_active(orientation)
     };
 
-    for terminal in rebuild_tab_page(state, tab_id) {
-        start_terminal(state, &terminal);
+    for terminal in tabs_view::rebuild_tab_page(state, tab_id) {
+        terminal_events::start_terminal(state, &terminal);
     }
     focus_active_tab(state);
 }
@@ -702,7 +313,7 @@ pub(super) fn close_active_pane(state: &Rc<UiState>) {
         }
     }
 
-    rebuild_tab_page(state, tab_id);
+    tabs_view::rebuild_tab_page(state, tab_id);
     focus_active_tab(state);
 }
 
@@ -723,7 +334,7 @@ pub(super) fn move_pane_focus(state: &Rc<UiState>, direction: Direction) {
     focus_active_tab(state);
 }
 
-fn activate_pane(state: &Rc<UiState>, tab_id: TabId, pane_id: PaneId) {
+pub(crate) fn activate_pane(state: &Rc<UiState>, tab_id: TabId, pane_id: PaneId) {
     let changed = state
         .tab_collection
         .borrow_mut()
@@ -801,7 +412,7 @@ pub(super) fn terminal_for(
         .and_then(|entry| entry.terminals.get(&pane_id).cloned())
 }
 
-fn attach_pane_focus_handler(
+pub(crate) fn attach_pane_focus_handler(
     widget: &gtk::Widget,
     state: Weak<UiState>,
     tab_id: TabId,
@@ -814,24 +425,6 @@ fn attach_pane_focus_handler(
             activate_pane(&state, tab_id, pane_id);
         }
     });
-}
-
-// ---------------------------------------------------------------------------
-// Notebook signals: sync active tab on switch, focus newly visible terminal
-// ---------------------------------------------------------------------------
-
-fn connect_notebook_signals(state: &Rc<UiState>) {
-    let state_switch = Rc::clone(state);
-    state
-        .notebook
-        .connect_switch_page(move |_notebook, _page, page_num| {
-            search::close_search(&state_switch);
-            state_switch
-                .tab_collection
-                .borrow_mut()
-                .set_active(page_num as usize);
-            focus_active_tab(&state_switch);
-        });
 }
 
 // ---------------------------------------------------------------------------
@@ -895,27 +488,7 @@ fn connect_close_request(state: &Rc<UiState>) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn start_terminal(state: &Rc<UiState>, terminal: &Terminal) {
-    match terminal.start() {
-        Ok(warnings) => show_warnings(state, &warnings),
-        Err(error) => show_status(state, error.user_message()),
-    }
-}
-
-fn show_warnings(state: &Rc<UiState>, warnings: &[StartupWarning]) {
-    if warnings.is_empty() {
-        return;
-    }
-
-    let message = warnings
-        .iter()
-        .map(|warning| warning.user_message())
-        .collect::<Vec<_>>()
-        .join(" ");
-    show_status(state, &message);
-}
-
-fn show_settings_warnings(state: &Rc<UiState>, warnings: &[SettingsWarning]) {
+pub(crate) fn show_settings_warnings(state: &Rc<UiState>, warnings: &[SettingsWarning]) {
     if warnings.is_empty() {
         return;
     }
@@ -933,103 +506,7 @@ pub(crate) fn show_status(state: &Rc<UiState>, message: &str) {
     state.status_revealer.set_reveal_child(true);
 }
 
-// ---------------------------------------------------------------------------
-// Workspace integration: replace tabs and apply profiles
-// ---------------------------------------------------------------------------
-
-/// Replaces the tab collection in the UI with the loaded snapshot.
-///
-/// This is used by the workspace bootstrap to restore the last layout.
-/// The existing notebook pages are removed, the new tabs are
-/// inserted, and terminals are started for each restored pane.
-pub(crate) fn update_tab_collection(state: &Rc<UiState>, new_collection: TabCollection) {
-    // Detach existing notebook pages.
-    let existing_pages: Vec<(TabId, gtk::Box, gtk::Label)> = {
-        let entries = state.tab_entries.borrow();
-        entries
-            .iter()
-            .map(|(id, entry)| (*id, entry.page.clone(), entry.label.clone()))
-            .collect()
-    };
-    for (_, page, _) in &existing_pages {
-        state.notebook.detach_tab(page);
-    }
-    state.tab_entries.borrow_mut().clear();
-    *state.tab_collection.borrow_mut() = new_collection;
-
-    // Build fresh tab pages for every restored tab.
-    let new_tabs: Vec<TabId> = state
-        .tab_collection
-        .borrow()
-        .tabs()
-        .iter()
-        .map(|tab| tab.id)
-        .collect();
-    let mut new_terminals_to_start: Vec<Terminal> = Vec::new();
-    let mut new_terminal_specs: Vec<(
-        TabId,
-        PaneId,
-        Terminal,
-        Option<crate::workspace::StartConfig>,
-    )> = Vec::new();
-
-    for tab_id in new_tabs {
-        let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        page.set_hexpand(true);
-        page.set_vexpand(true);
-        let title = {
-            let collection = state.tab_collection.borrow();
-            collection
-                .tabs()
-                .iter()
-                .find(|t| t.id == tab_id)
-                .map(|t| t.custom_title.clone().unwrap_or_else(|| t.title.clone()))
-                .unwrap_or_else(|| "IV".to_owned())
-        };
-        let label = gtk::Label::new(Some(&title));
-        state.notebook.append_page(&page, Some(&label));
-        state.tab_entries.borrow_mut().insert(
-            tab_id,
-            TabEntry {
-                terminals: HashMap::new(),
-                label: label.clone(),
-                page: page.clone(),
-            },
-        );
-
-        let (pane_ids, start_config) = {
-            let collection = state.tab_collection.borrow();
-            let Some(tab) = collection.tabs().iter().find(|t| t.id == tab_id) else {
-                continue;
-            };
-            (tab.pane_tree.pane_ids(), tab.start_config.clone())
-        };
-
-        let new_terminals = rebuild_tab_page(state, tab_id);
-        for terminal in new_terminals {
-            new_terminals_to_start.push(terminal.clone());
-            if let Some(pane_id) = terminal_active_pane_id(state, tab_id) {
-                new_terminal_specs.push((tab_id, pane_id, terminal, start_config.clone()));
-            }
-        }
-        let _ = pane_ids; // currently informational; could be used for diagnostics
-    }
-
-    // Restore active tab index.
-    let active_index = state.tab_collection.borrow().active_index();
-    if active_index < state.notebook.n_pages() as usize {
-        state.notebook.set_current_page(Some(active_index as u32));
-    }
-
-    focus_active_tab(state);
-
-    for terminal in &new_terminals_to_start {
-        start_terminal(state, terminal);
-    }
-    let _ = new_terminal_specs;
-}
-
-fn terminal_active_pane_id(state: &Rc<UiState>, tab_id: TabId) -> Option<PaneId> {
+pub(crate) fn terminal_active_pane_id(state: &Rc<UiState>, tab_id: TabId) -> Option<PaneId> {
     let collection = state.tab_collection.borrow();
     collection
         .tabs()

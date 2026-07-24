@@ -39,18 +39,33 @@
 - automatische Migration von Konfiguration aus Phase 1
 - Erweiterung von `PaneTree` oder `PaneNode` um Pfade, Shells oder Startbefehle
 - harte Validierung der Verzeichnisexistenz beim Anlegen eines Profils
+- Erweiterung von `PaneTree` oder `PaneNode` um Pfade, Shells oder
+- harte Validierung der Verzeichnis-Existenz beim Anlegen eines Profils
 
 ## Bekannte Einschränkungen
 - VTE ist das einzige Terminal-Backend im MVP
 - Wayland primäre Zielplattform; X11 nur soweit GTK4/VTE es tragen
 - `Alt+Arrow` für Fokusnavigation kollidiert potenziell mit TUI-Anwendungen (bash, vim, tmux, htop)
 - `Ctrl+Shift+Q` für Pane-Schließen kann mit manchen Anwendungen kollidieren
+- `Alt+1`…`Alt+9` für Profil-Schnellauswahl ist noch nicht auf TUI-Konflikte geprüft
 
 ## Offene Risiken
 - `gtk::Paned`-Kompatibilität mit VTE bei tief verschachtelten Bäumen
 - Fokuszuverlässigkeit nach Split-/Close-Operationen (Fokus muss auf VTE-Widget landen)
 - Shortcut-Konflikte mit Terminalprogrammen (insb. Alt+Arrow, Ctrl+Shift+Q)
 - Wayland- und Langzeitprüfung der Pane- und Prozess-Lebenszyklen steht aus
+- `profiles.toml` mit Top-Level `schema_version = 1` und `[[profile]]`-Liste.
+- `layout.toml` mit `schema_version = 1` und `[layout]`-Sektion
+- `active_profile_id` ist **getrennt** vom Tab-Baum gespeichert. Wird das
+- Unbekannte `schema_version` führt zu sicherem Fallback und
+- prüft **nur Schema**: muss absolut sein, `~` darf nur als Präfix
+- prüft **keine** reale Existenz beim Anlegen
+- Existenz wird ausschließlich beim Anwenden geprüft: schlägt die
+- Symlink-Loop-Erkennung erfolgt beim Anwenden mit maximaler Tiefe (16)
+- HeaderBar-Menü „Profil" mit drei Einträgen: „Anlegen…", „Öffnen ▸"
+- Tastenkürzel `Alt+1` bis `Alt+9` für die ersten neun Profile in stabiler
+- „Kein Profil" hat bewusst kein Schnellkürzel und wird ausschließlich
+- Profilanlage erfolgt über einen `AdwPreferencesPage`-basierten Dialog
 
 ## Offene Fragen
 - (keine Einträge)
@@ -59,12 +74,13 @@
 - (keine Einträge)
 
 ## Aktuelle Prioritäten
-- Phase-1-Desktop- und Langzeitprüfung unter Wayland
-- anschließend Workspace-Grundlage an Startsequenz, Terminalstart und Profil-UI anbinden
+- T18: Sicherheitsreview gemäß agents/security-reviewer.md
+- T19: Manuelle Desktop-Prüfung:
+- T22: Abschlussbericht gemäß DEFINITION_OF_DONE.md.
 
 ## Verworfene Optionen
 - `adw::TabView` + `adw::TabBar` (zugunsten `gtk::Notebook`, einfacher)
 - Neuen leeren Tab automatisch öffnen beim Schließen des letzten (zugunsten Fenster schließen)
 - Schließen des letzten Tabs verhindern (zugunsten Fenster schließen)
 
-<!-- CONTEXT-LEDGER-META: {"schemaVersion":1,"lastCheckpoint":"2026-07-24T07:00:22.521Z","lastTrigger":"plan-to-work","planHash":"d7e21bd3476f8886d570e21ffa3501a1118c3ac5a1824bc0690577787f1d1e0a"} -->
+<!-- CONTEXT-LEDGER-META: {"schemaVersion":1,"lastCheckpoint":"2026-07-24T07:26:49.702Z","lastTrigger":"session-shutdown","planHash":"99a4cc4a0bf2502693c3a935ba4102c651d959e6f515a63ea515692d2db91406"} -->
